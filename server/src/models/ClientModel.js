@@ -249,6 +249,19 @@ export const ClientModel = {
       `INSERT INTO observations (client_id, texto) VALUES ($1, $2) RETURNING *`,
       [client_id, texto]
     )
+
+    // Registra contacted no relatório do dia (1x por dia por cliente)
+    await db.query(
+      `UPDATE clients SET ultimo_contato = NOW(), updated_at = NOW() WHERE id = $1`,
+      [client_id]
+    )
+    await db.query(
+      `INSERT INTO daily_report_events (client_id, event_type, event_date)
+       VALUES ($1, 'contacted', CURRENT_DATE)
+       ON CONFLICT DO NOTHING`,
+      [client_id]
+    )
+
     return rows[0]
   },
 
