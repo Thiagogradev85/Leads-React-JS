@@ -1,0 +1,489 @@
+import { useState, useEffect, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import {
+  ArrowLeft, Edit2, Save, X, Phone, Globe, Instagram,
+  Star, ShoppingCart, Send, Trash2, MessageSquare,
+  Mail, Facebook, Twitter, Linkedin, MapPin
+} from 'lucide-react'
+import { api } from '../utils/api.js'
+import { formatDate, formatDateTime, statusPill, NOTAS, UFS, whatsappLink, instagramLink, facebookLink, twitterLink, linkedinLink } from '../utils/constants.js'
+import { Toast } from '../components/Toast.jsx'
+
+export function ClientDetailPage() {
+  const { id } = useParams()
+  const navigate = useNavigate()
+
+  const [client, setClient]         = useState(null)
+  const [observations, setObs]      = useState([])
+  const [statuses, setStatuses]     = useState([])
+  const [catalogs, setCatalogs]     = useState([])
+  const [sellers, setSellers]       = useState([])
+  const [editing, setEditing]       = useState(false)
+  const [form, setForm]             = useState({})
+  const [obsText, setObsText]       = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [toast, setToast]           = useState(null)
+
+  function showToast(message, type = 'success') { setToast({ message, type }) }
+
+  const load = useCallback(async () => {
+    const [c, obs, s, cat, sel] = await Promise.all([
+      api.getClient(id),
+      api.listObservations(id),
+      api.listStatuses(),
+      api.listCatalogs(),
+      api.listSellers(),
+    ])
+    setClient(c)
+    setForm(c)
+    setObs(obs)
+    setStatuses(s)
+    setCatalogs(cat)
+    setSellers(sel)
+  }, [id])
+
+  useEffect(() => { load() }, [load])
+
+  async function handleSave() {
+    setLoading(true)
+    try {
+      await api.updateClient(id, {
+        nome:        form.nome,
+        responsavel: form.responsavel,
+        cidade:      form.cidade,
+        uf:          form.uf,
+        cep:         form.cep,
+        logradouro:  form.logradouro,
+        numero:      form.numero,
+        complemento: form.complemento,
+        bairro:      form.bairro,
+        whatsapp:    form.whatsapp,
+        telefone:    form.telefone,
+        email:       form.email,
+        site:        form.site,
+        instagram:   form.instagram,
+        facebook:    form.facebook,
+        twitter:     form.twitter,
+        linkedin:    form.linkedin,
+        nota:        form.nota       ? parseInt(form.nota)       : null,
+        status_id:   form.status_id  ? parseInt(form.status_id)  : null,
+        catalog_id:  form.catalog_id ? parseInt(form.catalog_id) : null,
+        seller_id:   form.seller_id  ? parseInt(form.seller_id)  : null,
+        ativo:       form.ativo,
+      })
+      showToast('Cliente atualizado!')
+      setEditing(false)
+      load()
+    } catch (err) {
+      showToast(err.message, 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handlePurchase() {
+    try {
+      await api.registerPurchase(id)
+      showToast('Compra registrada no relatório diário! 🎉')
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+  }
+
+  async function handleAddObs() {
+    if (!obsText.trim()) return
+    try {
+      const obs = await api.addObservation(id, obsText.trim())
+      setObs(prev => [obs, ...prev])
+      setObsText('')
+      showToast('Follow-up salvo!')
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+  }
+
+  async function handleDeleteObs(obsId) {
+    if (!confirm('Remover este follow-up?')) return
+    try {
+      await api.deleteObservation(id, obsId)
+      setObs(prev => prev.filter(o => o.id !== obsId))
+    } catch (err) {
+      showToast(err.message, 'error')
+    }
+  }
+
+  const set = (field, val) => setForm(f => ({ ...f, [field]: val }))
+
+  if (!client) return <div className="p-6 text-zinc-500 text-sm">Carregando...</div>
+
+  const currentStatus = statuses.find(s => s.id === client.status_id)
+
+  // Endereço completo formatado
+  const endereco = [
+    client.logradouro,
+    client.numero && `nº ${client.numero}`,
+    client.complemento,
+    client.bairro,
+    [client.cidade, client.uf].filter(Boolean).join('/'),
+    client.cep && `CEP ${client.cep}`,
+  ].filter(Boolean).join(', ')
+
+  const inp = (field, placeholder, type = 'text') => (
+    <input className="input" type={type} value={form[field] || ''}
+      onChange={e => set(field, e.target.value)} placeholder={placeholder} />
+  )
+
+  const section = (title) => (
+    <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mt-1 mb-2">{title}</p>
+  )
+
+  return (
+    <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
+      <button className="btn-ghost btn-sm" onClick={() => navigate('/clients')}>
+        <ArrowLeft size={15} /> Voltar
+      </button>
+
+      <div className="card space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {editing ? (
+              <input className="input text-lg font-bold" value={form.nome}
+                onChange={e => set('nome', e.target.value)} />
+            ) : (
+              <h1 className="text-xl font-bold text-zinc-100">{client.nome}</h1>
+            )}
+            {client.responsavel && !editing && (
+              <p className="text-sm text-zinc-400 mt-0.5">Resp: {client.responsavel}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {currentStatus && (
+                <span style={statusPill(currentStatus.cor)}>{currentStatus.nome}</span>
+              )}
+              {client.nota && (
+                <span className={`flex items-center gap-1 text-xs font-semibold ${NOTAS[client.nota]?.color}`}>
+                  <Star size={12} /> {NOTAS[client.nota]?.label}
+                </span>
+              )}
+              {!client.ativo && (
+                <span className="badge bg-zinc-700 text-zinc-400">Inativo</span>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2 shrink-0">
+            {editing ? (
+              <>
+                <button className="btn-primary btn-sm" onClick={handleSave} disabled={loading}>
+                  <Save size={14} /> Salvar
+                </button>
+                <button className="btn-secondary btn-sm" onClick={() => { setEditing(false); setForm(client) }}>
+                  <X size={14} />
+                </button>
+              </>
+            ) : (
+              <button className="btn-secondary btn-sm" onClick={() => setEditing(true)}>
+                <Edit2 size={14} /> Editar
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* EDIÇÃO */}
+        {editing ? (
+          <div className="space-y-1">
+            {section('Identificação')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="sm:col-span-2">
+                <label className="label">Responsável</label>
+                {inp('responsavel', 'Nome do contato')}
+              </div>
+            </div>
+
+            {section('Endereço')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">CEP</label>
+                {inp('cep', '00000-000')}
+              </div>
+              <div>
+                <label className="label">UF</label>
+                <select className="select" value={form.uf || ''} onChange={e => set('uf', e.target.value)}>
+                  <option value="">Selecione</option>
+                  {UFS.map(u => <option key={u}>{u}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Cidade</label>
+                {inp('cidade', '')}
+              </div>
+              <div>
+                <label className="label">Bairro</label>
+                {inp('bairro', '')}
+              </div>
+              <div>
+                <label className="label">Logradouro</label>
+                {inp('logradouro', 'Rua, Av...')}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="label">Número</label>
+                  {inp('numero', '')}
+                </div>
+                <div>
+                  <label className="label">Complemento</label>
+                  {inp('complemento', 'Sala, Loja...')}
+                </div>
+              </div>
+            </div>
+
+            {section('Contato')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">WhatsApp</label>
+                {inp('whatsapp', '5511...')}
+              </div>
+              <div>
+                <label className="label">Telefone Fixo</label>
+                {inp('telefone', '1133...')}
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">E-mail</label>
+                {inp('email', 'contato@loja.com', 'email')}
+              </div>
+              <div className="sm:col-span-2">
+                <label className="label">Site</label>
+                {inp('site', 'https://...')}
+              </div>
+            </div>
+
+            {section('Redes Sociais')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Instagram</label>
+                {inp('instagram', '@usuario')}
+              </div>
+              <div>
+                <label className="label">Facebook</label>
+                {inp('facebook', 'facebook.com/pagina')}
+              </div>
+              <div>
+                <label className="label">X (Twitter)</label>
+                {inp('twitter', '@usuario')}
+              </div>
+              <div>
+                <label className="label">LinkedIn</label>
+                {inp('linkedin', 'linkedin.com/company/...')}
+              </div>
+            </div>
+
+            {section('CRM')}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="label">Status</label>
+                <select className="select" value={form.status_id || ''} onChange={e => set('status_id', e.target.value)}>
+                  <option value="">Sem status</option>
+                  {statuses.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Nota</label>
+                <select className="select" value={form.nota || ''} onChange={e => set('nota', e.target.value)}>
+                  <option value="">Sem nota</option>
+                  {Object.entries(NOTAS).map(([v, n]) => (
+                    <option key={v} value={v}>{v} — {n.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Catálogo</label>
+                <select className="select" value={form.catalog_id || ''} onChange={e => set('catalog_id', e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {catalogs.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="label">Vendedor</label>
+                <select className="select" value={form.seller_id || ''} onChange={e => set('seller_id', e.target.value)}>
+                  <option value="">Nenhum</option>
+                  {sellers.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 sm:col-span-2">
+                <input type="checkbox" id="ativo_edit" checked={!!form.ativo}
+                  onChange={e => set('ativo', e.target.checked)} className="accent-sky-500" />
+                <label htmlFor="ativo_edit" className="text-sm text-zinc-300">Cliente ativo</label>
+              </div>
+            </div>
+          </div>
+
+        ) : (
+          /* VISUALIZAÇÃO */
+          <div className="space-y-4 text-sm">
+            {/* Endereço */}
+            {endereco && (
+              <div>
+                <p className="label">Endereço</p>
+                <p className="text-zinc-200 flex items-start gap-1">
+                  <MapPin size={13} className="mt-0.5 shrink-0 text-zinc-500" /> {endereco}
+                </p>
+              </div>
+            )}
+
+            {/* Grid infos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6">
+              <Info label="Catálogo"    value={client.catalog_nome} />
+              <Info label="Vendedor"    value={client.seller_nome} />
+              <Info label="Criado em"   value={formatDate(client.created_at)} />
+              <Info label="Últ. contato" value={formatDateTime(client.ultimo_contato)} />
+
+              {client.whatsapp && (
+                <div>
+                  <p className="label">WhatsApp</p>
+                  <a href={whatsappLink(client.whatsapp)} target="_blank" rel="noreferrer"
+                    className="text-green-400 hover:text-green-300 flex items-center gap-1">
+                    <Phone size={13} /> {client.whatsapp}
+                  </a>
+                </div>
+              )}
+              {client.telefone && (
+                <div>
+                  <p className="label">Telefone Fixo</p>
+                  <a href={`tel:${client.telefone}`}
+                    className="text-zinc-300 hover:text-zinc-100 flex items-center gap-1">
+                    <Phone size={13} /> {client.telefone}
+                  </a>
+                </div>
+              )}
+              {client.email && (
+                <div>
+                  <p className="label">E-mail</p>
+                  <a href={`mailto:${client.email}`}
+                    className="text-sky-400 hover:text-sky-300 flex items-center gap-1">
+                    <Mail size={13} /> {client.email}
+                  </a>
+                </div>
+              )}
+              {client.site && (
+                <div>
+                  <p className="label">Site</p>
+                  <a href={client.site} target="_blank" rel="noreferrer"
+                    className="text-sky-400 hover:text-sky-300 flex items-center gap-1 truncate">
+                    <Globe size={13} /> {client.site}
+                  </a>
+                </div>
+              )}
+              {client.instagram && (
+                <div>
+                  <p className="label">Instagram</p>
+                  <a href={instagramLink(client.instagram)} target="_blank" rel="noreferrer"
+                    className="text-pink-400 hover:text-pink-300 flex items-center gap-1">
+                    <Instagram size={13} /> {client.instagram}
+                  </a>
+                </div>
+              )}
+              {client.facebook && (
+                <div>
+                  <p className="label">Facebook</p>
+                  <a href={facebookLink(client.facebook)} target="_blank" rel="noreferrer"
+                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
+                    <Facebook size={13} /> {client.facebook}
+                  </a>
+                </div>
+              )}
+              {client.twitter && (
+                <div>
+                  <p className="label">X (Twitter)</p>
+                  <a href={twitterLink(client.twitter)} target="_blank" rel="noreferrer"
+                    className="text-zinc-300 hover:text-white flex items-center gap-1">
+                    <Twitter size={13} /> {client.twitter}
+                  </a>
+                </div>
+              )}
+              {client.linkedin && (
+                <div>
+                  <p className="label">LinkedIn</p>
+                  <a href={linkedinLink(client.linkedin)} target="_blank" rel="noreferrer"
+                    className="text-blue-500 hover:text-blue-400 flex items-center gap-1">
+                    <Linkedin size={13} /> {client.linkedin}
+                  </a>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Botão Realizou Compra */}
+        {!editing && (
+          <div className="pt-2 border-t border-zinc-800">
+            <button className="btn-success" onClick={handlePurchase}>
+              <ShoppingCart size={15} /> Realizou Compra
+            </button>
+            <p className="text-xs text-zinc-600 mt-1">
+              Cada clique registra uma compra no relatório do dia.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Follow-up */}
+      <div className="card space-y-4">
+        <h2 className="font-semibold text-zinc-200 flex items-center gap-2">
+          <MessageSquare size={16} className="text-sky-400" />
+          Follow-up / Histórico de Contatos
+        </h2>
+
+        <div className="space-y-2">
+          <textarea
+            className="input resize-none" rows={3}
+            placeholder="Descreva o contato realizado com este cliente..."
+            value={obsText}
+            onChange={e => setObsText(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) handleAddObs() }}
+          />
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-zinc-600">Ctrl+Enter para salvar</p>
+            <button className="btn-primary btn-sm" onClick={handleAddObs} disabled={!obsText.trim()}>
+              <Send size={13} /> Salvar Follow-up
+            </button>
+          </div>
+        </div>
+
+        {observations.length === 0 ? (
+          <p className="text-xs text-zinc-600 py-2">Nenhum follow-up registrado ainda.</p>
+        ) : (
+          <div className="space-y-3">
+            {observations.map(obs => (
+              <div key={obs.id} className="flex gap-3 min-w-0">
+                <div className="w-px bg-zinc-700 relative mt-1 shrink-0">
+                  <div className="absolute -left-[3px] top-0 w-1.5 h-1.5 rounded-full bg-sky-500" />
+                </div>
+                <div className="flex-1 pb-3 min-w-0">
+                  <div className="flex items-start justify-between gap-2 min-w-0">
+                    <p className="text-sm text-zinc-200 whitespace-pre-wrap break-all min-w-0 flex-1">{obs.texto}</p>
+                    <button className="shrink-0 text-zinc-600 hover:text-red-400 transition-colors"
+                      onClick={() => handleDeleteObs(obs.id)}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-zinc-600 mt-1">{formatDateTime(obs.created_at)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function Info({ label, value }) {
+  return (
+    <div>
+      <p className="label">{label}</p>
+      <p className="text-zinc-200">{value || '—'}</p>
+    </div>
+  )
+}

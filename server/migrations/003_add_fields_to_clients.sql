@@ -1,0 +1,13 @@
+-- Migration: adiciona novos campos ao cadastro de clientes
+ALTER TABLE clients
+  ADD COLUMN IF NOT EXISTS email        VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS facebook     VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS twitter      VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS linkedin     VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS responsavel  VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS telefone     VARCHAR(30),
+  ADD COLUMN IF NOT EXISTS logradouro   VARCHAR(300),
+  ADD COLUMN IF NOT EXISTS numero       VARCHAR(20),
+  ADD COLUMN IF NOT EXISTS complemento  VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS bairro       VARCHAR(200),
+  ADD COLUMN IF NOT EXISTS cep          VARCHAR(10);
