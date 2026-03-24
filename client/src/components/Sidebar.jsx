@@ -44,7 +44,7 @@ export function Sidebar() {
         md:translate-x-0 md:static md:flex
       `}>
         <div className="px-4 mb-6 cursor-pointer" onClick={() => navigate('/clients')}>
-          <span className="text-sky-400 font-bold text-lg tracking-tight hover:text-sky-300 transition-colors">⚡ CRM Scooter</span>
+          <span className="text-sky-400 font-bold text-lg tracking-tight hover:text-sky-300 transition-colors">⚡ CRM</span>
           <p className="text-zinc-500 text-xs mt-0.5">Controle de Vendas</p>
         </div>
 
