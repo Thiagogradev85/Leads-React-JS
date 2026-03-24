@@ -18,6 +18,12 @@ import { ClientForm } from '../components/ClientForm.jsx'
 import { EmptyState } from '../components/EmptyState.jsx'
 import { Toast } from '../components/Toast.jsx'
 
+function isCreatedToday(dateStr) {
+  if (!dateStr) return false
+  const today = new Date().toISOString().slice(0, 10)
+  return dateStr.slice(0, 10) === today
+}
+
 // Agrupa array de clientes por UF, retorna objeto { 'SP': [...], 'RJ': [...] }
 function groupByUF(clients) {
   return clients.reduce((acc, c) => {
@@ -39,6 +45,9 @@ function ClientRow({ c, alreadyContacted, onContact, onDeactivate, onDelete, nav
         >
           {c.nome}
         </button>
+        {isCreatedToday(c.created_at) && (
+          <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Novo</span>
+        )}
         {!c.ativo && (
           <span className="ml-2 badge bg-zinc-700 text-zinc-400">Inativo</span>
         )}
