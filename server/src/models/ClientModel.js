@@ -312,14 +312,15 @@ export const ClientModel = {
             [rec.whatsapp || null, rec.nome, rec.uf.toUpperCase()]
           )
           if (existing.length > 0) {
+            // Só preenche campos que estão vazios no banco — nunca sobrescreve dados existentes
             await client.query(
               `UPDATE clients SET
                 nome      = $1,
-                cidade    = COALESCE($2, cidade),
-                uf        = COALESCE($3, uf),
-                whatsapp  = COALESCE($4, whatsapp),
-                site      = COALESCE($5, site),
-                instagram = COALESCE($6, instagram),
+                cidade    = COALESCE(NULLIF(cidade, ''),    $2),
+                uf        = COALESCE(NULLIF(uf, ''),        $3),
+                whatsapp  = COALESCE(NULLIF(whatsapp, ''),  $4),
+                site      = COALESCE(NULLIF(site, ''),      $5),
+                instagram = COALESCE(NULLIF(instagram, ''), $6),
                 updated_at = NOW()
                WHERE id = $7`,
               [rec.nome, rec.cidade || null, rec.uf || null, rec.whatsapp || null, rec.site || null, rec.instagram || null, existing[0].id]
