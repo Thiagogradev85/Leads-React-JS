@@ -20,6 +20,7 @@ export function ClientDetailPage() {
   const [sellers, setSellers]       = useState([])
   const [editing, setEditing]       = useState(false)
   const [form, setForm]             = useState({})
+  const [fieldErrors, setFieldErrors] = useState({})
   const [obsText, setObsText]       = useState('')
   const [loading, setLoading]       = useState(false)
   const { modal, showModal } = useAppModalError()
@@ -43,14 +44,23 @@ export function ClientDetailPage() {
   useEffect(() => { load() }, [load])
 
   async function handleSave() {
-    if (!form.nome?.trim()) {
-      showModal({ type: 'error', title: 'Campo obrigatório', message: 'Nome é obrigatório.' })
+    const errs = {}
+    if (!form.nome?.trim()) errs.nome = true
+    if (!form.uf?.trim())   errs.uf   = true
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs)
+      showModal({
+        type: 'warning',
+        title: 'Campos obrigatórios',
+        message: 'Preencha os campos obrigatórios antes de salvar:',
+        details: [
+          errs.nome && 'Nome da empresa / loja',
+          errs.uf   && 'UF (Estado)',
+        ].filter(Boolean),
+      })
       return
     }
-    if (!form.uf) {
-      showModal({ type: 'error', title: 'Campo obrigatório', message: 'UF é obrigatória.' })
-      return
-    }
+    setFieldErrors({})
     setLoading(true)
     try {
       await api.updateClient(id, {
@@ -118,7 +128,10 @@ export function ClientDetailPage() {
     }
   }
 
-  const set = (field, val) => setForm(f => ({ ...f, [field]: val }))
+  const set = (field, val) => {
+    setForm(f => ({ ...f, [field]: val }))
+    if (fieldErrors[field]) setFieldErrors(e => ({ ...e, [field]: null }))
+  }
 
   if (!client) return <div className="p-6 text-zinc-500 text-sm">Carregando...</div>
 
@@ -156,8 +169,14 @@ export function ClientDetailPage() {
         <div className="flex items-start justify-between gap-3">
           <div>
             {editing ? (
-              <input className="input text-lg font-bold" value={form.nome}
-                onChange={e => set('nome', e.target.value)} />
+              <div>
+                <input
+                  className={`input text-lg font-bold ${fieldErrors.nome ? 'border-red-500' : ''}`}
+                  value={form.nome}
+                  onChange={e => set('nome', e.target.value)}
+                />
+                {fieldErrors.nome && <p className="text-xs text-red-400 mt-1">* obrigatório</p>}
+              </div>
             ) : (
               <h1 className="text-xl font-bold text-zinc-100">{client.nome}</h1>
             )}
@@ -185,7 +204,7 @@ export function ClientDetailPage() {
                 <button className="btn-primary btn-sm" onClick={handleSave} disabled={loading}>
                   <Save size={14} /> Salvar
                 </button>
-                <button className="btn-secondary btn-sm" onClick={() => { setEditing(false); setForm(client) }}>
+                <button className="btn-secondary btn-sm" onClick={() => { setEditing(false); setForm(client); setFieldErrors({}) }}>
                   <X size={14} />
                 </button>
               </>
@@ -216,10 +235,15 @@ export function ClientDetailPage() {
               </div>
               <div>
                 <label className="label">UF *</label>
-                <select className="select" value={form.uf || ''} onChange={e => set('uf', e.target.value)}>
+                <select
+                  className={`select ${fieldErrors.uf ? 'border-red-500' : ''}`}
+                  value={form.uf || ''}
+                  onChange={e => set('uf', e.target.value)}
+                >
                   <option value="">Selecione</option>
                   {UFS.map(u => <option key={u}>{u}</option>)}
                 </select>
+                {fieldErrors.uf && <p className="text-xs text-red-400 mt-1">* obrigatório</p>}
               </div>
               <div>
                 <label className="label">Cidade</label>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api } from '../utils/api.js'
 import { UFS, NOTAS } from '../utils/constants.js'
+import { useAppModalError } from '../hooks/useAppModalError.js'
 
 const EMPTY = {
   nome: '', responsavel: '',
@@ -17,6 +18,7 @@ export function ClientForm({ initial = {}, onSave, onCancel }) {
   const [sellers, setSellers]   = useState([])
   const [loading, setLoading]   = useState(false)
   const [errors, setErrors]     = useState({})
+  const { modal, showModal }    = useAppModalError()
 
   useEffect(() => {
     Promise.all([api.listStatuses(), api.listCatalogs(), api.listSellers()])
@@ -31,9 +33,21 @@ export function ClientForm({ initial = {}, onSave, onCancel }) {
   async function handleSubmit(e) {
     e.preventDefault()
     const errs = {}
-    if (!form.nome?.trim()) errs.nome = 'Nome é obrigatório'
-    if (!form.uf) errs.uf = 'UF é obrigatória'
-    if (Object.keys(errs).length) { setErrors(errs); return }
+    if (!form.nome?.trim()) errs.nome = true
+    if (!form.uf)           errs.uf   = true
+    if (Object.keys(errs).length) {
+      setErrors(errs)
+      showModal({
+        type: 'warning',
+        title: 'Campos obrigatórios',
+        message: 'Preencha os campos obrigatórios antes de salvar:',
+        details: [
+          errs.nome && 'Nome da empresa / loja',
+          errs.uf   && 'UF (Estado)',
+        ].filter(Boolean),
+      })
+      return
+    }
     setLoading(true)
     try {
       await onSave({
@@ -50,7 +64,8 @@ export function ClientForm({ initial = {}, onSave, onCancel }) {
 
   const inp = (field, placeholder, type = 'text') => (
     <input
-      className="input" type={type}
+      className={`input ${errors[field] ? 'border-red-500' : ''}`}
+      type={type}
       value={form[field] || ''}
       onChange={e => set(field, e.target.value)}
       placeholder={placeholder}
@@ -62,148 +77,155 @@ export function ClientForm({ initial = {}, onSave, onCancel }) {
   )
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-1">
+    <>
+      {modal}
+      <form onSubmit={handleSubmit} className="space-y-1">
 
-      {section('Identificação')}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="sm:col-span-2">
-          <label className="label">Nome *</label>
-          {inp('nome', 'Nome da loja / empresa')}
-          {errors.nome && <p className="text-xs text-red-400 mt-1">{errors.nome}</p>}
+        {section('Identificação')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="sm:col-span-2">
+            <label className="label">Nome *</label>
+            {inp('nome', 'Nome da loja / empresa')}
+            {errors.nome && <p className="text-xs text-red-400 mt-1">* obrigatório</p>}
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Responsável</label>
+            {inp('responsavel', 'Nome do contato')}
+          </div>
         </div>
-        <div className="sm:col-span-2">
-          <label className="label">Responsável</label>
-          {inp('responsavel', 'Nome do contato')}
-        </div>
-      </div>
 
-      {section('Endereço')}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label">CEP</label>
-          {inp('cep', '00000-000')}
-        </div>
-        <div>
-          <label className="label">UF *</label>
-          <select className="select" value={form.uf} onChange={e => set('uf', e.target.value)}>
-            <option value="">Selecione</option>
-            {UFS.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
-          {errors.uf && <p className="text-xs text-red-400 mt-1">{errors.uf}</p>}
-        </div>
-        <div>
-          <label className="label">Cidade</label>
-          {inp('cidade', '')}
-        </div>
-        <div>
-          <label className="label">Bairro</label>
-          {inp('bairro', '')}
-        </div>
-        <div>
-          <label className="label">Logradouro</label>
-          {inp('logradouro', 'Rua, Av...')}
-        </div>
-        <div className="grid grid-cols-2 gap-2">
+        {section('Endereço')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className="label">Número</label>
-            {inp('numero', '')}
+            <label className="label">CEP</label>
+            {inp('cep', '00000-000')}
           </div>
           <div>
-            <label className="label">Complemento</label>
-            {inp('complemento', 'Sala, Loja...')}
+            <label className="label">UF *</label>
+            <select
+              className={`select ${errors.uf ? 'border-red-500' : ''}`}
+              value={form.uf}
+              onChange={e => set('uf', e.target.value)}
+            >
+              <option value="">Selecione</option>
+              {UFS.map(u => <option key={u} value={u}>{u}</option>)}
+            </select>
+            {errors.uf && <p className="text-xs text-red-400 mt-1">* obrigatório</p>}
+          </div>
+          <div>
+            <label className="label">Cidade</label>
+            {inp('cidade', '')}
+          </div>
+          <div>
+            <label className="label">Bairro</label>
+            {inp('bairro', '')}
+          </div>
+          <div>
+            <label className="label">Logradouro</label>
+            {inp('logradouro', 'Rua, Av...')}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="label">Número</label>
+              {inp('numero', '')}
+            </div>
+            <div>
+              <label className="label">Complemento</label>
+              {inp('complemento', 'Sala, Loja...')}
+            </div>
           </div>
         </div>
-      </div>
 
-      {section('Contato')}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label">WhatsApp</label>
-          {inp('whatsapp', '5511...')}
-        </div>
-        <div>
-          <label className="label">Telefone Fixo</label>
-          {inp('telefone', '1133...')}
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label">E-mail</label>
-          {inp('email', 'contato@loja.com', 'email')}
-        </div>
-        <div className="sm:col-span-2">
-          <label className="label">Site</label>
-          {inp('site', 'https://...')}
-        </div>
-      </div>
-
-      {section('Redes Sociais')}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label">Instagram</label>
-          {inp('instagram', '@usuario')}
-        </div>
-        <div>
-          <label className="label">Facebook</label>
-          {inp('facebook', 'facebook.com/pagina')}
-        </div>
-        <div>
-          <label className="label">X (Twitter)</label>
-          {inp('twitter', '@usuario')}
-        </div>
-        <div>
-          <label className="label">LinkedIn</label>
-          {inp('linkedin', 'linkedin.com/company/...')}
-        </div>
-      </div>
-
-      {section('CRM')}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="label">Status</label>
-          <select className="select" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
-            <option value="">Sem status</option>
-            {statuses.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Nota</label>
-          <select className="select" value={form.nota} onChange={e => set('nota', e.target.value)}>
-            <option value="">Sem nota</option>
-            {Object.entries(NOTAS).map(([v, n]) => (
-              <option key={v} value={v}>{v} — {n.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="label">Catálogo</label>
-          <select className="select" value={form.catalog_id} onChange={e => set('catalog_id', e.target.value)}>
-            <option value="">Nenhum</option>
-            {catalogs.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="label">Vendedor</label>
-          <select className="select" value={form.seller_id} onChange={e => set('seller_id', e.target.value)}>
-            <option value="">Nenhum</option>
-            {sellers.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
-          </select>
-        </div>
-        {initial.id && (
-          <div className="flex items-center gap-2 sm:col-span-2">
-            <input type="checkbox" id="ativo" checked={!!form.ativo}
-              onChange={e => set('ativo', e.target.checked)} className="accent-sky-500" />
-            <label htmlFor="ativo" className="text-sm text-zinc-300">Cliente ativo</label>
+        {section('Contato')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">WhatsApp</label>
+            {inp('whatsapp', '5511...')}
           </div>
-        )}
-      </div>
+          <div>
+            <label className="label">Telefone Fixo</label>
+            {inp('telefone', '1133...')}
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">E-mail</label>
+            {inp('email', 'contato@loja.com', 'email')}
+          </div>
+          <div className="sm:col-span-2">
+            <label className="label">Site</label>
+            {inp('site', 'https://...')}
+          </div>
+        </div>
 
-      <div className="flex gap-2 pt-4">
-        <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? 'Salvando...' : 'Salvar'}
-        </button>
-        {onCancel && (
-          <button type="button" className="btn-secondary" onClick={onCancel}>Cancelar</button>
-        )}
-      </div>
-    </form>
+        {section('Redes Sociais')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Instagram</label>
+            {inp('instagram', '@usuario')}
+          </div>
+          <div>
+            <label className="label">Facebook</label>
+            {inp('facebook', 'facebook.com/pagina')}
+          </div>
+          <div>
+            <label className="label">X (Twitter)</label>
+            {inp('twitter', '@usuario')}
+          </div>
+          <div>
+            <label className="label">LinkedIn</label>
+            {inp('linkedin', 'linkedin.com/company/...')}
+          </div>
+        </div>
+
+        {section('CRM')}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="label">Status</label>
+            <select className="select" value={form.status_id} onChange={e => set('status_id', e.target.value)}>
+              <option value="">Sem status</option>
+              {statuses.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Nota</label>
+            <select className="select" value={form.nota} onChange={e => set('nota', e.target.value)}>
+              <option value="">Sem nota</option>
+              {Object.entries(NOTAS).map(([v, n]) => (
+                <option key={v} value={v}>{v} — {n.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="label">Catálogo</label>
+            <select className="select" value={form.catalog_id} onChange={e => set('catalog_id', e.target.value)}>
+              <option value="">Nenhum</option>
+              {catalogs.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="label">Vendedor</label>
+            <select className="select" value={form.seller_id} onChange={e => set('seller_id', e.target.value)}>
+              <option value="">Nenhum</option>
+              {sellers.map(s => <option key={s.id} value={s.id}>{s.nome}</option>)}
+            </select>
+          </div>
+          {initial.id && (
+            <div className="flex items-center gap-2 sm:col-span-2">
+              <input type="checkbox" id="ativo" checked={!!form.ativo}
+                onChange={e => set('ativo', e.target.checked)} className="accent-sky-500" />
+              <label htmlFor="ativo" className="text-sm text-zinc-300">Cliente ativo</label>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-2 pt-4">
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? 'Salvando...' : 'Salvar'}
+          </button>
+          {onCancel && (
+            <button type="button" className="btn-secondary" onClick={onCancel}>Cancelar</button>
+          )}
+        </div>
+      </form>
+    </>
   )
 }
