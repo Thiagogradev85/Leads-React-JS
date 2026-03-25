@@ -62,7 +62,7 @@ function ClientList({ title, clients, defaultOpen = false }) {
 }
 
 export function DailyReportPage() {
-  const today = new Date().toISOString().split('T')[0]
+  const today = new Date().toLocaleDateString('en-CA') // data local do usuário, não UTC
   const [date, setDate]       = useState(today)
   const [report, setReport]   = useState(null)
   const [loading, setLoading] = useState(false)

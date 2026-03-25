@@ -20,7 +20,7 @@ import { useAppModalError } from '../hooks/useAppModalError.js'
 
 function isCreatedToday(dateStr) {
   if (!dateStr) return false
-  const today = new Date().toISOString().slice(0, 10)
+  const today = new Date().toLocaleDateString('en-CA') // data local do usuário
   return dateStr.slice(0, 10) === today
 }
 
@@ -179,7 +179,7 @@ export function ClientsPage() {
       setTotal(result.total)
 
       // Verifica quais clientes já foram contatados hoje
-      const today = new Date().toISOString().split('T')[0]
+      const today = new Date().toLocaleDateString('en-CA') // data local do usuário
       const details = await api.getReportDetails(today)
       setContactedToday(new Set(details.details.contacted.map(c => c.client_id)))
     } finally {

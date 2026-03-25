@@ -1,5 +1,6 @@
 import { whatsAppService } from '../modules/whatsapp/index.js'
 import { ClientModel } from '../models/ClientModel.js'
+import { AppError } from '../utils/AppError.js'
 
 export const WhatsAppController = {
   // GET /whatsapp/status
@@ -8,28 +9,28 @@ export const WhatsAppController = {
   },
 
   // POST /whatsapp/connect
-  async connect(req, res) {
+  async connect(req, res, next) {
     try {
       whatsAppService.connect() // não aguarda — conexão é assíncrona (QR code)
       res.json({ message: 'Conectando... aguarde o QR Code.' })
     } catch (err) {
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   },
 
   // POST /whatsapp/disconnect
-  async disconnect(req, res) {
+  async disconnect(req, res, next) {
     try {
       await whatsAppService.disconnect()
       res.json({ message: 'Desconectado.' })
     } catch (err) {
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   },
 
   // GET /whatsapp/preview?status_id=&ufs=MT,MS,PR
   // Retorna clientes que receberão a mensagem (com WhatsApp válido)
-  async preview(req, res) {
+  async preview(req, res, next) {
     try {
       const { status_id, ufs } = req.query
       const result = await ClientModel.list({
@@ -42,16 +43,16 @@ export const WhatsAppController = {
       const clients = result.data.filter(c => c.whatsapp)
       res.json({ total: clients.length, clients })
     } catch (err) {
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   },
 
   // POST /whatsapp/send-bulk
   // body: { status_id, ufs, message, delay_ms }
-  async sendBulk(req, res) {
+  async sendBulk(req, res, next) {
     try {
       const { status_id, ufs, message, delay_ms = 5000 } = req.body
-      if (!message?.trim()) return res.status(400).json({ error: 'Mensagem não pode estar vazia.' })
+      if (!message?.trim()) throw new AppError('Mensagem não pode estar vazia.', 400)
 
       const result = await ClientModel.list({
         status_id: status_id || undefined,
@@ -61,7 +62,7 @@ export const WhatsAppController = {
         page: 1,
       })
       const clients = result.data.filter(c => c.whatsapp)
-      if (clients.length === 0) return res.status(400).json({ error: 'Nenhum cliente com WhatsApp encontrado para os filtros selecionados.' })
+      if (clients.length === 0) throw new AppError('Nenhum cliente com WhatsApp encontrado para os filtros selecionados.', 400)
 
       res.json({ message: `Iniciando envio para ${clients.length} clientes...`, total: clients.length })
 
@@ -83,7 +84,7 @@ export const WhatsAppController = {
         console.log('[WhatsApp] Envio concluído:', results)
       })
     } catch (err) {
-      res.status(500).json({ error: err.message })
+      next(err)
     }
   },
 }

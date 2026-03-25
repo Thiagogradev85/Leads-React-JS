@@ -6,15 +6,17 @@ Sistema de controle de vendas mobile-first para gerenciamento de clientes, catá
 
 ## Stack
 
-| Camada    | Tecnologia                          |
-|-----------|-------------------------------------|
-| Runtime   | Bun                                 |
-| Backend   | Express.js (Node/Bun)               |
-| Banco     | PostgreSQL — Neon.tech              |
-| Frontend  | React 18 + Vite + Tailwind CSS      |
-| PDF       | PDFKit (servidor) + jsPDF (cliente) |
-| IA        | Anthropic Claude (importação de PDF)|
-| Deploy    | Render (API + Static Site)          |
+| Camada    | Tecnologia                                      |
+|-----------|-------------------------------------------------|
+| Runtime   | Node.js 18+                                     |
+| Backend   | Express.js                                      |
+| Banco     | PostgreSQL — Neon.tech                          |
+| Frontend  | React 18 + Vite + Tailwind CSS                  |
+| PDF       | PDFKit (servidor)                               |
+| IA        | Anthropic Claude (importação de PDF)            |
+| WhatsApp  | Baileys — envio em massa via WhatsApp Web       |
+| E-mail    | Nodemailer — envio em massa com SMTP            |
+| Deploy    | Render (API + Static Site)                      |
 
 ---
 
@@ -207,6 +209,7 @@ A lógica de negócio foi extraída da pasta `services/` e reorganizada em `modu
 | `file-import`   | Importação de clientes via Excel (.xlsx)                             |
 | `file-export`   | Exportação de clientes (Excel/PDF) e geração de relatório diário PDF |
 | `whatsapp`      | CRM Automático — envio em massa via WhatsApp Web (Baileys)           |
+| `email`         | CRM Automático — envio em massa via SMTP com Nodemailer              |
 
 Cada módulo expõe um `index.js` com exports nomeados. Os controllers importam apenas pelo caminho do módulo, sem depender da estrutura interna.
 
@@ -356,6 +359,119 @@ Após cada mensagem enviada com sucesso, o sistema chama `ClientModel.markContac
 
 ---
 
+## CRM Automático — E-mail via Nodemailer
+
+O módulo `email` permite enviar e-mails em massa para clientes da lista usando qualquer servidor SMTP (Gmail, Outlook, SMTP próprio, etc.).
+
+### Fluxo de configuração e envio
+
+```
+[Frontend] Preenche host, port, user, pass
+     ↓
+POST /email/configure    → testa conexão SMTP (verifica credenciais)
+     ↓
+[Frontend] Preenche filtros + assunto + mensagem HTML + delay
+     ↓
+GET /email/preview?status_id=&ufs=   → lista clientes com e-mail válido
+     ↓
+POST /email/send-test { to, subject, message }  → envia e-mail de teste com dados fictícios
+     ↓
+POST /email/send-bulk    → resposta imediata "Iniciando envio para N clientes..."
+     ↓
+[Backend] sendBulk() roda em background — para cada cliente:
+     │   ├── interpola variáveis no assunto e no HTML
+     │   ├── envia via Nodemailer (sendMail)
+     │   ├── chama onSent(client) → ClientModel.markContacted(id)
+     │   └── aguarda delayMs antes do próximo
+     ↓
+Retorna { sent, failed, errors[] }
+```
+
+### Variáveis de template
+
+A mensagem e o assunto suportam substituição automática (case-insensitive):
+
+| Variável      | Substituído por  |
+|---------------|------------------|
+| `{{nome}}`    | `client.nome`    |
+| `{{cidade}}`  | `client.cidade`  |
+| `{{uf}}`      | `client.uf`      |
+
+### Endpoints
+
+```
+GET  /email/status                       → { configured, user }
+POST /email/configure                    → { host, port, secure, user, pass }
+POST /email/disconnect                   → remove a configuração SMTP
+GET  /email/preview?status_id=&ufs=      → lista clientes que receberão o e-mail
+POST /email/send-test                    → { to, subject, message } — e-mail de teste
+POST /email/send-bulk                    → { status_id, ufs, subject, message, delay_ms }
+```
+
+---
+
+## Tratamento de Erros
+
+### Backend — `AppError` + middleware global
+
+Todos os controllers usam o padrão `throw new AppError(mensagem, statusCode)` para erros previsíveis (validação, not found, regra de negócio). Erros inesperados (banco fora do ar, crash de módulo) caem no middleware global com status 500.
+
+```js
+// Em qualquer controller
+async get(req, res, next) {
+  try {
+    const data = await ClientModel.get(req.params.id)
+    if (!data) throw new AppError('Cliente não encontrado', 404)
+    res.json(data)
+  } catch (err) {
+    next(err)  // AppError → middleware usa err.statusCode; outros → 500
+  }
+},
+```
+
+```js
+// server/src/index.js — middleware global
+app.use((err, req, res, _next) => {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({ error: err.message })
+  }
+  console.error('[Erro inesperado]', err)
+  res.status(500).json({ error: 'Erro interno do servidor. Verifique os logs.' })
+})
+```
+
+### Frontend — `useAppModalError`
+
+Todas as páginas usam o hook `useAppModalError` (em `client/src/hooks/useAppModalError.js`) para exibir feedback ao usuário. O componente `AppModalError` suporta os tipos `success`, `error`, `warning` e `info` com ícone e mensagem clara.
+
+```jsx
+import { useAppModalError } from '../hooks/useAppModalError.js'
+
+function MinhaPage() {
+  const { modal, showModal } = useAppModalError()
+
+  async function handleSalvar() {
+    try {
+      await api.salvar(dados)
+      showModal({ type: 'success', title: 'Salvo', message: 'Dados salvos com sucesso.' })
+    } catch (err) {
+      showModal({ type: 'error', title: 'Erro', message: err.message })
+    }
+  }
+
+  return (
+    <>
+      {modal}
+      {/* resto da página */}
+    </>
+  )
+}
+```
+
+> `AppModal` e `useAppModal` existem como re-exports de `AppModalError` / `useAppModalError` para compatibilidade retroativa.
+
+---
+
 ## Reset Automático de Status à Meia-Noite
 
 Clientes com status **Contatado** são revertidos para **Prospecção** automaticamente à meia-noite. O agendador é iniciado junto com o servidor e usa `setTimeout` recursivo para garantir pontualidade sem drift.
@@ -455,20 +571,29 @@ GET  /whatsapp/preview?status_id=&ufs=      → lista clientes que receberão a 
 POST /whatsapp/send-bulk                    → { status_id, ufs, message, delay_ms }
 ```
 
+### E-mail / CRM Automático
+```
+GET  /email/status                          → { configured, user }
+POST /email/configure                       → { host, port, secure, user, pass }
+POST /email/disconnect                      → remove a configuração SMTP
+GET  /email/preview?status_id=&ufs=         → lista clientes com e-mail válido
+POST /email/send-test                       → { to, subject, message }
+POST /email/send-bulk                       → { status_id, ufs, subject, message, delay_ms }
+```
+
 ---
 
 ## Instalação e Execução Local
 
 ### Pré-requisitos
-- [Bun](https://bun.sh) instalado
+- Node.js 18+
 - Conta no [Neon.tech](https://neon.tech) com banco PostgreSQL
 - (Opcional) Chave da [Anthropic API](https://console.anthropic.com) para importação de catálogos por PDF
 
 ### 1. Clonar e instalar dependências
 ```bash
-bun install
-cd server && bun install
-cd ../client && bun install
+cd server && npm install
+cd ../client && npm install
 ```
 
 ### 2. Configurar variáveis de ambiente
@@ -494,8 +619,11 @@ Se necessário, execute também as migrations 002 e 003 na sequência.
 
 ### 4. Rodar em desenvolvimento
 ```bash
-# Na raiz do projeto:
-bun run dev
+# Terminal 1 — backend
+cd server && npm run dev
+
+# Terminal 2 — frontend
+cd client && npm run dev
 ```
 - Frontend: http://localhost:5173
 - Backend:  http://localhost:8000
@@ -504,7 +632,7 @@ bun run dev
 
 O projeto já inclui configuração de debug em `.vscode/launch.json`.
 
-**Pré-requisito:** ter o `bun` instalado e disponível no PATH.
+**Pré-requisito:** ter o Node.js 18+ instalado.
 
 **Como usar:**
 1. Abra a pasta raiz do projeto no VS Code
@@ -522,8 +650,8 @@ O projeto já inclui configuração de debug em `.vscode/launch.json`.
 ### Backend (Web Service)
 1. Conecte o repositório no Render
 2. Root Directory: `server`
-3. Build Command: `bun install`
-4. Start Command: `bun start`
+3. Build Command: `npm ci`
+4. Start Command: `npm start`
 5. Variáveis de ambiente:
    - `DATABASE_URL` = connection string do Neon
    - `ANTHROPIC_API_KEY` = chave da API Anthropic
@@ -531,7 +659,7 @@ O projeto já inclui configuração de debug em `.vscode/launch.json`.
 
 ### Frontend (Static Site)
 1. Root Directory: `client`
-2. Build Command: `bun install && bun run build`
+2. Build Command: `npm ci && npm run build`
 3. Publish Directory: `dist`
 4. Variável: `VITE_API_URL` = URL do backend no Render
 

@@ -35,16 +35,20 @@ async function resetContatadoParaProspeccao() {
 
 function agendarResetMeiaNoite() {
   const agora = new Date()
-  const meiaNoite = new Date()
-  meiaNoite.setHours(24, 0, 0, 0) // próxima meia-noite
-  const msAteResetE = meiaNoite - agora
+
+  // Próxima meia-noite no horário de Brasília (UTC-3, sem DST desde 2019)
+  // 00:00 BRT = 03:00 UTC
+  const dataHojeBrasilia = agora.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const [ano, mes, dia] = dataHojeBrasilia.split('-').map(Number)
+  const meiaNoite = new Date(Date.UTC(ano, mes - 1, dia + 1, 3, 0, 0))
+  const msAteReset = meiaNoite - agora
 
   setTimeout(async () => {
     await resetContatadoParaProspeccao()
-    agendarResetMeiaNoite() // reagenda para a próxima meia-noite
-  }, msAteResetE)
+    agendarResetMeiaNoite() // reagenda para a próxima meia-noite de Brasília
+  }, msAteReset)
 
-  console.log(`[Reset diário] Agendado para ${meiaNoite.toLocaleString('pt-BR')}`)
+  console.log(`[Reset diário] Agendado para ${meiaNoite.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`)
 }
 
 const app = express()

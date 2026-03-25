@@ -151,7 +151,7 @@ export const ClientModel = {
     // Registra evento new_client no relatório diário
     await db.query(
       `INSERT INTO daily_report_events (client_id, event_type, event_date)
-       VALUES ($1, 'new_client', CURRENT_DATE)
+       VALUES ($1, 'new_client', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
        ON CONFLICT DO NOTHING`,
       [client.id]
     )
@@ -217,7 +217,7 @@ export const ClientModel = {
         )
         await db.query(
           `INSERT INTO daily_report_events (client_id, event_type, event_date)
-           VALUES ($1, 'contacted', CURRENT_DATE)
+           VALUES ($1, 'contacted', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
            ON CONFLICT DO NOTHING`,
           [id]
         )
@@ -227,7 +227,7 @@ export const ClientModel = {
       if (nomeStatus === 'Catálogo') {
         await db.query(
           `INSERT INTO daily_report_events (client_id, event_type, event_date)
-           VALUES ($1, 'catalog_requested', CURRENT_DATE)
+           VALUES ($1, 'catalog_requested', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
            ON CONFLICT DO NOTHING`,
           [id]
         )
@@ -256,7 +256,7 @@ export const ClientModel = {
     }
     await db.query(
       `INSERT INTO daily_report_events (client_id, event_type, event_date)
-       VALUES ($1, 'contacted', CURRENT_DATE)
+       VALUES ($1, 'contacted', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
        ON CONFLICT DO NOTHING`,
       [id]
     )
@@ -280,7 +280,7 @@ export const ClientModel = {
   async registerPurchase(id) {
     await db.query(
       `INSERT INTO daily_report_events (client_id, event_type, event_date)
-       VALUES ($1, 'purchased', CURRENT_DATE)`,
+       VALUES ($1, 'purchased', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)`,
       [id]
     )
   },
@@ -307,7 +307,7 @@ export const ClientModel = {
     )
     await db.query(
       `INSERT INTO daily_report_events (client_id, event_type, event_date)
-       VALUES ($1, 'contacted', CURRENT_DATE)
+       VALUES ($1, 'contacted', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
        ON CONFLICT DO NOTHING`,
       [client_id]
     )
@@ -376,7 +376,8 @@ export const ClientModel = {
             )
             await client.query(
               `INSERT INTO daily_report_events (client_id, event_type, event_date)
-               VALUES ($1, 'new_client', CURRENT_DATE)`,
+               VALUES ($1, 'new_client', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
+               ON CONFLICT DO NOTHING`,
               [inserted[0].id]
             )
             results.imported++
