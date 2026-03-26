@@ -109,10 +109,9 @@ export function ClientDetailPage() {
   async function handleAddObs() {
     if (!obsText.trim()) return
     try {
-      const obs = await api.addObservation(id, obsText.trim())
-      setObs(prev => [obs, ...prev])
+      await api.addObservation(id, obsText.trim())
       setObsText('')
-      showModal({ type: 'success', title: 'Sucesso', message: 'Follow-up salvo!' })
+      await load()
     } catch (err) {
       showModal({ type: 'error', title: 'Erro', message: err.message })
     }
