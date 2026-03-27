@@ -30,7 +30,7 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 
 // Status que indicam encerramento ou vínculo permanente — excluídos do lembrete de atenção.
 const OVERDUE_EXCLUDED_STATUSES = new Set([
-  'Fabricação própria',
+  'Fabricação Própria',
   'Fechado',
   'Cliente Ativo',
   'Cliente Inativo',
