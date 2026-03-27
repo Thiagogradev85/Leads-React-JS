@@ -1,6 +1,11 @@
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+import { existsSync } from 'fs'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 import statusRoutes      from './routes/status.js'
 import sellerRoutes      from './routes/sellers.js'
@@ -72,6 +77,13 @@ app.use('/prospecting',  prospectingRoutes)
 
 // ── Health check ───────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }))
+
+// ── Serve frontend (produção) ───────────────────────
+const distPath = join(__dirname, '../../client/dist')
+if (existsSync(distPath)) {
+  app.use(express.static(distPath))
+  app.get('*', (_req, res) => res.sendFile(join(distPath, 'index.html')))
+}
 
 // ── Middleware global de erros ──────────────────────
 // eslint-disable-next-line no-unused-vars
