@@ -527,6 +527,15 @@ export function ClientDetailPage() {
         </h2>
 
         <div className="space-y-2">
+          <div className="flex justify-end">
+            <button
+              type="button"
+              className="text-xs text-pink-400 hover:text-pink-300 transition-colors flex items-center gap-1"
+              onClick={() => setObsText('Enviado via Instagram')}
+            >
+              <Instagram size={11} /> Instagram
+            </button>
+          </div>
           <textarea
             className="input resize-none" rows={3}
             placeholder="Descreva o contato realizado com este cliente..."
