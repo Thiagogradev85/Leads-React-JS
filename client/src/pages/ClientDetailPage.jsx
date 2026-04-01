@@ -531,7 +531,7 @@ export function ClientDetailPage() {
             <button
               type="button"
               className="text-xs text-pink-400 hover:text-pink-300 transition-colors flex items-center gap-1"
-              onClick={() => setObsText('Enviado via Instagram')}
+              onClick={() => setObsText('Contatado via Instagram')}
             >
               <Instagram size={11} /> Instagram
             </button>
