@@ -80,6 +80,54 @@ function mapPlaceToProspect(place, ufFallback = null) {
   }
 }
 
+/**
+ * Normalizes a string: removes accents and converts to lowercase.
+ */
+function normalize(str) {
+  if (!str) return ''
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+const STOPWORDS = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em', 'no', 'na', 'nos', 'nas', 'a', 'o', 'as', 'os'])
+
+/**
+ * Extracts meaningful keywords from the searched segments.
+ * Words shorter than 4 chars or in the stopword list are ignored.
+ */
+function extractKeywords(segments) {
+  const keywords = new Set()
+  for (const seg of segments) {
+    const words = normalize(seg).split(/\s+/).filter(w => w.length >= 4 && !STOPWORDS.has(w))
+    words.forEach(w => keywords.add(w))
+  }
+  return [...keywords]
+}
+
+/**
+ * Returns true if a prospect is relevant to the searched segments.
+ * Matches when any keyword (from segment) and any word from the prospect's
+ * type or name share a common substring root (e.g. "bicicletaria" ↔ "bicicleta").
+ */
+function isRelevantResult(prospect, keywords) {
+  if (keywords.length === 0) return true
+  // If both type and name are missing, keep the result to avoid data loss
+  if (!prospect._type && !prospect.nome) return true
+
+  const typeWords = normalize(prospect._type || '').split(/\s+/).filter(w => w.length >= 4)
+  const nameWords = normalize(prospect.nome  || '').split(/\s+/).filter(w => w.length >= 4)
+  const allWords  = [...typeWords, ...nameWords]
+
+  if (allWords.length === 0) return true
+
+  for (const kw of keywords) {
+    for (const word of allWords) {
+      // Bidirectional containment catches "bicicletaria" ↔ "bicicleta"
+      if (kw.includes(word) || word.includes(kw)) return true
+    }
+  }
+  return false
+}
+
 export const ProspectingController = {
   /**
    * POST /prospecting/search
@@ -118,6 +166,12 @@ export const ProspectingController = {
       }
 
       let prospects = allPlaces.map(p => mapPlaceToProspect(p, uf))
+
+      // Filter out results unrelated to the searched segments.
+      // Google Maps sometimes returns businesses that match on location or
+      // unrelated tags — e.g. a "Loja de Roupa" appearing in a bike search.
+      const keywords = extractKeywords(segments)
+      prospects = prospects.filter(p => isRelevantResult(p, keywords))
 
       // Filter by UF when specified: exclude results whose parsed address UF
       // differs from the requested UF (Google Maps often returns results from
