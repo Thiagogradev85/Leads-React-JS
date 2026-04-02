@@ -465,7 +465,7 @@ export function ClientsPage() {
   function renderAttentionSection(isOpen, setIsOpen) {
     const allOverdue      = clients.filter(c => isOverdue(c, attentionDays))
     const filteredOverdue = allOverdue.filter(c => !attentionIgnoredUFs.has(c.uf || '—'))
-    const ufOptions       = [...new Set(clients.map(c => c.uf || '—'))].sort()
+    const ufOptions       = [...new Set([...clients.map(c => c.uf || '—'), ...attentionIgnoredUFs])].sort()
 
     if (allOverdue.length === 0 && attentionIgnoredUFs.size === 0) return null
 
@@ -494,7 +494,7 @@ export function ClientsPage() {
               : <ChevronDown size={14} className="ml-auto text-amber-600" />
             }
           </button>
-          <div className="relative px-2">
+          <div className="relative z-20 px-2">
             <button
               className={`p-1.5 rounded transition-colors ${attentionIgnoredUFs.size > 0 ? 'text-amber-400 bg-amber-800/50' : 'text-amber-700 hover:text-amber-400 hover:bg-amber-800/30'}`}
               title="Configurar estados do grupo de atenção"
