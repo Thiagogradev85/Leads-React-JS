@@ -18,34 +18,54 @@ const FIELD_META = {
  *  - onSave: (patches) => Promise<void>  — patches = [{ id, fields }]
  *  - onClose: () => void
  */
+const BATCH_SIZE = 20
+
+function chunkArray(arr, size) {
+  const chunks = []
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size))
+  return chunks
+}
+
 export function EnrichModal({ clientIds, onSave, onClose }) {
-  const [phase, setPhase]     = useState('idle')   // idle | loading | review | saving | done
-  const [results, setResults] = useState([])        // [{ id, nome, suggestions, error }]
+  const [phase, setPhase]         = useState('idle')   // idle | loading | review | saving | done
+  const [results, setResults]     = useState([])        // [{ id, nome, suggestions, error }]
+  const [batchProgress, setBatchProgress] = useState({ current: 0, total: 0 })
   // selected[id][field] = true/false
-  const [selected, setSelected] = useState({})
+  const [selected, setSelected]   = useState({})
   const [saveError, setSaveError] = useState(null)
+
+  const totalBatches = Math.ceil(clientIds.length / BATCH_SIZE)
 
   async function handleSearch() {
     setPhase('loading')
-    try {
-      const { results: res } = await api.enrichProspects(clientIds)
+    setBatchProgress({ current: 0, total: totalBatches })
 
-      // Pre-seleciona todos os campos encontrados
-      const sel = {}
-      for (const r of res) {
-        sel[r.id] = {}
-        for (const field of Object.keys(r.suggestions || {})) {
-          sel[r.id][field] = true
-        }
+    const allResults = []
+    const batches = chunkArray(clientIds, BATCH_SIZE)
+
+    for (let i = 0; i < batches.length; i++) {
+      setBatchProgress({ current: i + 1, total: batches.length })
+      try {
+        const { results: res } = await api.enrichProspects(batches[i])
+        allResults.push(...res)
+      } catch (err) {
+        // Registra erro do lote mas continua os demais
+        allResults.push(...batches[i].map(id => ({ id, nome: null, suggestions: {}, error: err.message })))
       }
-
-      setResults(res)
-      setSelected(sel)
-      setPhase('review')
-    } catch (err) {
-      setResults([{ id: null, nome: null, suggestions: {}, error: err.message }])
-      setPhase('review')
     }
+
+    // Pre-seleciona todos os campos encontrados
+    const sel = {}
+    for (const r of allResults) {
+      sel[r.id] = {}
+      for (const field of Object.keys(r.suggestions || {})) {
+        sel[r.id][field] = true
+      }
+    }
+
+    setResults(allResults)
+    setSelected(sel)
+    setPhase('review')
   }
 
   function toggleField(clientId, field) {
@@ -118,10 +138,27 @@ export function EnrichModal({ clientIds, onSave, onClose }) {
           )}
 
           {phase === 'loading' && (
-            <div className="text-center py-12 space-y-3">
+            <div className="text-center py-12 space-y-4">
               <Loader2 size={32} className="mx-auto text-amber-400 animate-spin" />
-              <p className="text-zinc-400 text-sm">Buscando dados para {clientIds.length} cliente{clientIds.length !== 1 ? 's' : ''}…</p>
-              <p className="text-zinc-600 text-xs">Isso pode levar alguns segundos</p>
+              <p className="text-zinc-400 text-sm">
+                Buscando dados para {clientIds.length} cliente{clientIds.length !== 1 ? 's' : ''}…
+              </p>
+              {totalBatches > 1 && (
+                <div className="space-y-1.5 max-w-xs mx-auto">
+                  <div className="w-full bg-zinc-800 rounded-full h-1.5">
+                    <div
+                      className="bg-amber-400 h-1.5 rounded-full transition-all duration-300"
+                      style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-zinc-600 text-xs">
+                    Lote {batchProgress.current} de {batchProgress.total}
+                  </p>
+                </div>
+              )}
+              {totalBatches === 1 && (
+                <p className="text-zinc-600 text-xs">Isso pode levar alguns segundos</p>
+              )}
             </div>
           )}
 
