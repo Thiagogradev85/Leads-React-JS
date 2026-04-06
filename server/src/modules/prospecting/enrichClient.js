@@ -1,88 +1,97 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { searchWeb } from './serper.js'
 
-const SYSTEM_PROMPT = `Você é um assistente especializado em enriquecimento de dados de empresas brasileiras.
-Receberá resultados de busca do Google sobre uma empresa e deve extrair dados de contato estruturados.
-Responda APENAS com JSON válido, sem texto adicional, sem markdown, sem blocos de código.
+// ── Helpers de extração ───────────────────────────────────────────────────────
 
-Formato obrigatório:
-{
-  "instagram": "handle sem @, ex: loja_exemplo (null se não encontrar)",
-  "facebook": "URL completa ou apenas o slug, ex: lojaexemplo (null se não encontrar)",
-  "email": "email@dominio.com (null se não encontrar)",
-  "whatsapp": "somente dígitos com DDD, ex: 41999990000 (null se não encontrar)",
-  "telefone": "somente dígitos com DDD, ex: 4133330000 (null se não encontrar)"
+function extractInstagram(text) {
+  // URL completa: instagram.com/handle  ou  instagr.am/handle
+  const urlMatch = text.match(/(?:instagram\.com|instagr\.am)\/([A-Za-z0-9_.]{2,30})(?:[/?#]|$)/i)
+  if (urlMatch) return urlMatch[1]
+  // @handle explícito
+  const atMatch = text.match(/@([A-Za-z0-9_.]{2,30})/)
+  if (atMatch) return atMatch[1]
+  return null
 }
 
-Regras:
-- instagram: extraia apenas o handle (sem @, sem instagram.com/)
-- facebook: extraia apenas o slug/caminho final (sem facebook.com/)
-- whatsapp: prefira números de celular (9 dígitos após DDD). Remova +55, espaços, traços e parênteses
-- telefone: prefira números fixos (8 dígitos após DDD). Remova +55, espaços, traços e parênteses
-- Se encontrar apenas um número e não souber se é whatsapp ou fixo, coloque em whatsapp
-- email: apenas endereços reais, ignore noreply@, suporte@ genéricos de plataformas
-- Se um campo não for encontrado nos resultados, retorne null
-- Nunca invente dados que não estejam nos resultados fornecidos`
+function extractFacebook(text) {
+  const match = text.match(/(?:facebook\.com|fb\.com)\/(?:pages\/[^/?#]+\/)?([A-Za-z0-9._-]{3,60})(?:[/?#]|$)/i)
+  if (!match) return null
+  const slug = match[1]
+  // Ignora segmentos genéricos
+  if (['share', 'sharer', 'permalink', 'photo', 'video', 'groups', 'events'].includes(slug.toLowerCase())) return null
+  return slug
+}
+
+function extractEmail(text) {
+  const match = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)
+  if (!match) return null
+  const email = match[1].toLowerCase()
+  // Ignora endereços genéricos de plataformas
+  const blocked = ['noreply', 'no-reply', 'mailer', 'bounce', 'example', 'sentry']
+  if (blocked.some(b => email.includes(b))) return null
+  return email
+}
+
+function extractPhone(text) {
+  // Números brasileiros: (DD) 9xxxx-xxxx | (DD) xxxx-xxxx | +55 variações
+  const matches = text.match(/(?:\+55\s?)?(?:\(?\d{2}\)?\s?)(?:9\s?\d{4}|\d{4})[\s-]?\d{4}/g)
+  if (!matches) return null
+  // Limpa e filtra por tamanho válido (10 ou 11 dígitos)
+  for (const raw of matches) {
+    const digits = raw.replace(/\D/g, '').replace(/^55/, '')
+    if (digits.length === 10 || digits.length === 11) return digits
+  }
+  return null
+}
+
+// ── Enriquecedor principal ────────────────────────────────────────────────────
 
 /**
- * Enriquecer dados de um cliente usando busca web + Claude.
+ * Busca dados de contato faltantes para um cliente usando Serper Web Search.
+ * Extração feita por parsing de URLs e regex — sem dependência de IA.
  *
  * @param {{ id, nome, cidade, uf, whatsapp, telefone, email, instagram, facebook }} client
- * @returns {{ instagram, facebook, email, whatsapp, telefone }} — apenas campos encontrados e ausentes no cliente
+ * @returns {{ instagram?, facebook?, email?, whatsapp?, telefone? }}
  */
 export async function enrichClient(client) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('ANTHROPIC_API_KEY não configurada no servidor.')
-  }
-
   const query = [client.nome, client.cidade, client.uf, 'instagram email contato'].filter(Boolean).join(' ')
 
   const { organic } = await searchWeb(query)
-
   if (!organic.length) return {}
 
-  // Monta contexto resumido dos resultados para o Claude
-  const searchContext = organic.slice(0, 8).map((r, i) => {
-    const parts = [`[${i + 1}] ${r.title || ''}`]
-    if (r.link)    parts.push(`URL: ${r.link}`)
-    if (r.snippet) parts.push(`Trecho: ${r.snippet}`)
-    if (r.sitelinks) {
-      const links = r.sitelinks.map(s => s.link || s.title).filter(Boolean)
-      if (links.length) parts.push(`Links: ${links.join(' | ')}`)
-    }
-    return parts.join('\n')
-  }).join('\n\n')
+  let instagram = null
+  let facebook  = null
+  let email     = null
+  let phone     = null   // será dividido em whatsapp/telefone abaixo
 
-  const userMessage = `Empresa: ${client.nome}
-Cidade: ${client.cidade || '—'} / ${client.uf || '—'}
+  for (const result of organic.slice(0, 10)) {
+    const texts = [
+      result.link    || '',
+      result.title   || '',
+      result.snippet || '',
+      ...(result.sitelinks || []).map(s => `${s.title || ''} ${s.link || ''}`),
+    ].join(' ')
 
-Resultados de busca:
-${searchContext}`
+    if (!instagram) instagram = extractInstagram(texts)
+    if (!facebook)  facebook  = extractFacebook(texts)
+    if (!email)     email     = extractEmail(texts)
+    if (!phone)     phone     = extractPhone(texts)
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
-  let raw
-  try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 256,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userMessage }],
-    })
-    raw = msg.content[0]?.text?.trim() || '{}'
-  } catch (err) {
-    throw new Error(`Claude enrich error: ${err.message}`)
+    // Para assim que encontrar tudo
+    if (instagram && facebook && email && phone) break
   }
 
-  let extracted = {}
-  try { extracted = JSON.parse(raw) } catch { return {} }
-
-  // Retorna apenas os campos que o cliente ainda não tem
   const result = {}
-  for (const field of ['instagram', 'facebook', 'email', 'whatsapp', 'telefone']) {
-    if (extracted[field] && !client[field]) {
-      result[field] = extracted[field]
-    }
+
+  if (instagram && !client.instagram) result.instagram = instagram
+  if (facebook  && !client.facebook)  result.facebook  = facebook
+  if (email     && !client.email)     result.email     = email
+
+  if (phone && phone.length === 11 && phone[2] === '9' && !client.whatsapp) {
+    result.whatsapp = phone
+  } else if (phone && phone.length === 10 && !client.telefone) {
+    result.telefone = phone
+  } else if (phone && !client.whatsapp && !client.telefone) {
+    result.whatsapp = phone
   }
 
   return result
