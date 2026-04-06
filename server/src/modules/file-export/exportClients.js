@@ -1,71 +1,80 @@
 import ExcelJS from 'exceljs'
 import PDFDocument from 'pdfkit'
 
-const COLS = [
-  { key: 'nome',        label: 'Nome'           },
-  { key: 'responsavel', label: 'Responsável'     },
-  { key: 'cidade',      label: 'Cidade'          },
-  { key: 'uf',          label: 'UF'              },
-  { key: 'cep',         label: 'CEP'             },
-  { key: 'logradouro',  label: 'Logradouro'      },
-  { key: 'numero',      label: 'Número'          },
-  { key: 'complemento', label: 'Complemento'     },
-  { key: 'bairro',      label: 'Bairro'          },
-  { key: 'whatsapp',    label: 'WhatsApp'        },
-  { key: 'telefone',    label: 'Telefone Fixo'   },
-  { key: 'email',       label: 'E-mail'          },
-  { key: 'site',        label: 'Site'            },
-  { key: 'instagram',   label: 'Instagram'       },
-  { key: 'facebook',    label: 'Facebook'        },
-  { key: 'twitter',     label: 'X (Twitter)'     },
-  { key: 'linkedin',    label: 'LinkedIn'        },
-  { key: 'status_nome', label: 'Status'          },
-  { key: 'nota',        label: 'Nota'            },
-  { key: 'seller_nome', label: 'Vendedor'        },
-  { key: 'catalog_nome',label: 'Catálogo'        },
-  { key: 'ativo',       label: 'Ativo'           },
+// Colunas para impressão — simples, fundo claro, orientação paisagem
+const PRINT_COLS = [
+  { key: 'nome',     label: 'Nome da Loja',  width: 36 },
+  { key: 'cidade_uf',label: 'Cidade / UF',   width: 22 },
+  { key: 'whatsapp', label: 'WhatsApp',      width: 18 },
+  { key: 'telefone', label: 'Telefone Fixo', width: 18 },
+  { key: 'email',    label: 'E-mail',        width: 30 },
+  { key: 'nota',     label: 'Nota',          width: 12 },
 ]
+
+const NOTA_LABEL = { 1: 'Fraco', 2: 'Médio', 3: 'Excelente' }
 
 export async function toExcel(clients) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'CRM Scooter'
-  const ws = wb.addWorksheet('Clientes', { views: [{ state: 'frozen', ySplit: 1 }] })
 
-  ws.columns = COLS.map(({ label, key }) => {
-    const maxLen = Math.max(label.length, ...clients.map(c => String(c[key] ?? '').length))
-    return { header: label, key, width: Math.min(Math.max(maxLen + 2, 10), 50) }
+  const ws = wb.addWorksheet('Clientes', {
+    views: [{ state: 'frozen', ySplit: 1 }],
+    pageSetup: {
+      orientation:    'landscape',
+      paperSize:      9,          // A4
+      fitToPage:      true,
+      fitToWidth:     1,
+      fitToHeight:    0,
+      margins: { left: 0.5, right: 0.5, top: 0.75, bottom: 0.75, header: 0.3, footer: 0.3 },
+    },
+    headerFooter: {
+      oddHeader: '&C&"Arial,Bold"Lista de Clientes — CRM Scooter',
+      oddFooter:  '&LGerado em &D &T&RPágina &P de &N',
+    },
   })
 
+  ws.columns = PRINT_COLS.map(({ label, key, width }) => ({ header: label, key, width }))
+
+  // Cabeçalho — cinza escuro discreto, fácil de imprimir
   const headerRow = ws.getRow(1)
   headerRow.eachCell(cell => {
-    cell.fill   = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0F3460' } }
-    cell.font   = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 }
-    cell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: false }
-    cell.border = { bottom: { style: 'medium', color: { argb: 'FF16213E' } } }
+    cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' } }
+    cell.font      = { bold: true, color: { argb: 'FF1A1A1A' }, size: 11, name: 'Arial' }
+    cell.alignment = { vertical: 'middle', horizontal: 'center' }
+    cell.border    = {
+      bottom: { style: 'medium', color: { argb: 'FF888888' } },
+      top:    { style: 'thin',   color: { argb: 'FF888888' } },
+    }
   })
-  headerRow.height = 22
+  headerRow.height = 20
 
+  // Linha de dados
   clients.forEach((c, i) => {
-    const values = {}
-    COLS.forEach(({ key }) => {
-      let val = c[key]
-      if (key === 'ativo') val = val ? 'Sim' : 'Não'
-      if (key === 'nota') val = val ? ['', 'Fraco', 'Médio', 'Excelente'][val] || val : ''
-      values[key] = val ?? ''
+    const row = ws.addRow({
+      nome:      c.nome      ?? '',
+      cidade_uf: [c.cidade, c.uf].filter(Boolean).join(' / '),
+      whatsapp:  c.whatsapp  ?? '',
+      telefone:  c.telefone  ?? '',
+      email:     c.email     ?? '',
+      nota:      NOTA_LABEL[c.nota] ?? '',
     })
 
-    const row = ws.addRow(values)
-    const bgColor = i % 2 === 0 ? 'FFF0F4FF' : 'FFFFFFFF'
+    // Linhas alternadas: branco / cinza muito claro — econômico para impressão
+    const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF5F5F5'
     row.eachCell({ includeEmpty: true }, cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } }
-      cell.font = { size: 10, color: { argb: 'FF1A1A2E' } }
+      cell.fill      = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+      cell.font      = { size: 10, color: { argb: 'FF1A1A1A' }, name: 'Arial' }
       cell.alignment = { vertical: 'middle' }
-      cell.border = { bottom: { style: 'thin', color: { argb: 'FFD0D9F0' } } }
+      cell.border    = { bottom: { style: 'thin', color: { argb: 'FFDDDDDD' } } }
     })
-    row.height = 18
+    row.height = 16
   })
 
-  ws.autoFilter = { from: 'A1', to: { row: 1, column: COLS.length } }
+  ws.autoFilter = { from: 'A1', to: { row: 1, column: PRINT_COLS.length } }
+
+  // Define área de impressão
+  ws.printArea = `A1:${String.fromCharCode(64 + PRINT_COLS.length)}${clients.length + 1}`
+
   return wb.xlsx.writeBuffer()
 }
 

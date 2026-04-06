@@ -140,11 +140,12 @@ export const ClientController = {
   // Exportação Excel / PDF (respeita os mesmos filtros da listagem)
   async exportClients(req, res, next) {
     try {
-      const { uf, status_id, ativo, search, format = 'xlsx' } = req.query
+      const { uf, status_id, ativo, ja_cliente, search, format = 'xlsx' } = req.query
       const result = await ClientModel.list({
         uf,
-        status_id: status_id ? parseInt(status_id) : undefined,
-        ativo: ativo !== undefined && ativo !== '' ? ativo === 'true' : undefined,
+        status_id:  status_id  ? parseInt(status_id) : undefined,
+        ativo:      ativo      !== undefined && ativo      !== '' ? ativo      === 'true' : undefined,
+        ja_cliente: ja_cliente !== undefined && ja_cliente !== '' ? ja_cliente === 'true' : undefined,
         search,
         limit: 9999,
         page: 1,
