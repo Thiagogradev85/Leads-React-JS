@@ -159,6 +159,12 @@ export function DailyReportPage() {
           {/* Cards de resumo */}
           <div className="grid grid-cols-2 gap-3">
             <SummaryCard
+              icon={BookOpen}
+              label="Pediram Catálogo"
+              value={summary.catalog_requested || 0}
+              color="border-sky-500"
+            />
+            <SummaryCard
               icon={Phone}
               label="Contatados"
               value={summary.contacted || 0}
@@ -169,12 +175,6 @@ export function DailyReportPage() {
               label="Clientes Novos"
               value={summary.new_client || 0}
               color="border-green-500"
-            />
-            <SummaryCard
-              icon={BookOpen}
-              label="Pediram Catálogo"
-              value={summary.catalog_requested || 0}
-              color="border-sky-500"
             />
             <SummaryCard
               icon={ShoppingCart}
@@ -193,6 +193,12 @@ export function DailyReportPage() {
           ) : (
             <div className="space-y-3">
               <ClientList
+                title="Pediram Catálogo"
+                clients={details.catalog_requested || []}
+                defaultOpen
+                onDelete={handleDelete}
+              />
+              <ClientList
                 title="Contatados"
                 clients={details.contacted || []}
                 defaultOpen
@@ -202,11 +208,6 @@ export function DailyReportPage() {
                 title="Clientes Novos"
                 clients={details.new_clients || []}
                 defaultOpen
-                onDelete={handleDelete}
-              />
-              <ClientList
-                title="Pediram Catálogo"
-                clients={details.catalog_requested || []}
                 onDelete={handleDelete}
               />
               <ClientList
