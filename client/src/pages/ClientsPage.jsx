@@ -178,25 +178,24 @@ function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, 
   )
 }
 
-function UFSection({ uf, rows, tableHead, contactedToday, rowProps }) {
-  const [open, setOpen] = useState(false)
+function UFSection({ uf, rows, tableHead, contactedToday, rowProps, isOpen, onToggle }) {
   return (
     <div className="table-wrapper">
       <button
         className="w-full flex items-center gap-2 px-4 py-2 bg-zinc-800 border-b border-zinc-700 hover:bg-zinc-700/60 transition-colors text-left"
-        onClick={() => setOpen(v => !v)}
+        onClick={onToggle}
       >
         <MapPin size={14} className="text-sky-400" />
         <span className="font-semibold text-zinc-100 text-sm">{uf}</span>
         <span className="text-zinc-500 text-xs">
           {rows.length} cliente{rows.length !== 1 ? 's' : ''}
         </span>
-        {open
+        {isOpen
           ? <ChevronUp size={14} className="ml-auto text-zinc-600" />
           : <ChevronDown size={14} className="ml-auto text-zinc-600" />
         }
       </button>
-      {open && (
+      {isOpen && (
         <table className="table">
           {tableHead}
           <tbody>
@@ -248,6 +247,22 @@ export function ClientsPage() {
   const [newClientsOpen, setNewClientsOpen] = useState(
     () => sessionStorage.getItem('section_newclients') === 'true'
   )
+  // Mapa de estado aberto/fechado por UF — sobrevive a re-renders e loads
+  const [openUFs, setOpenUFs] = useState(new Map())
+
+  function toggleUF(uf) {
+    setOpenUFs(prev => {
+      const next = new Map(prev)
+      next.set(uf, !next.get(uf))
+      return next
+    })
+  }
+
+  function isUFOpen(uf, totalUFs) {
+    if (openUFs.has(uf)) return openUFs.get(uf)
+    // Padrão: aberto quando há filtro de UF específico ou só 1 seção visível
+    return totalUFs === 1 || !!filters.uf
+  }
   const { modal, showModal } = useModal()
   const { overdueClients, showModal: showOverdueModal, dismiss: dismissOverdue } = useOverdueReminder(attentionDays)
 
@@ -700,6 +715,8 @@ export function ClientsPage() {
             tableHead={tableHead}
             contactedToday={contactedToday}
             rowProps={rowProps}
+            isOpen={isUFOpen(uf, sortedUFs.length)}
+            onToggle={() => toggleUF(uf)}
           />
         ))}
       </div>
