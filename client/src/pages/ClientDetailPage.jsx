@@ -3,11 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Edit2, Save, X, Phone, Globe, Instagram,
   Star, ShoppingCart, Send, Trash2, MessageSquare,
-  Mail, Facebook, Twitter, Linkedin, MapPin
+  Mail, Facebook, Twitter, Linkedin, MapPin, Sparkles
 } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { formatDate, formatDateTime, statusPill, NOTAS, UFS, whatsappLink, instagramLink, facebookLink, twitterLink, linkedinLink } from '../utils/constants.js'
 import { useModal } from '../hooks/useModal.js'
+import { EnrichModal } from '../components/EnrichModal.jsx'
 
 export function ClientDetailPage() {
   const { id } = useParams()
@@ -23,6 +24,7 @@ export function ClientDetailPage() {
   const [fieldErrors, setFieldErrors] = useState({})
   const [obsText, setObsText]       = useState('')
   const [loading, setLoading]       = useState(false)
+  const [enrichOpen, setEnrichOpen] = useState(false)
   const { modal, showModal } = useModal()
 
   const load = useCallback(async () => {
@@ -165,6 +167,15 @@ export function ClientDetailPage() {
     }
   }
 
+  // Recebe patches do EnrichModal e aplica ao formulário para revisão antes de salvar
+  async function handleEnrichSave(patches) {
+    for (const { fields } of patches) {
+      setForm(f => ({ ...f, ...fields }))
+    }
+    setEnrichOpen(false)
+    if (!editing) setEditing(true)
+  }
+
   const set = (field, val) => {
     setForm(f => ({ ...f, [field]: val }))
     if (fieldErrors[field]) setFieldErrors(e => ({ ...e, [field]: null }))
@@ -196,6 +207,14 @@ export function ClientDetailPage() {
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-5">
       {modal}
+
+      {enrichOpen && (
+        <EnrichModal
+          clientIds={[parseInt(id)]}
+          onSave={handleEnrichSave}
+          onClose={() => setEnrichOpen(false)}
+        />
+      )}
 
       <button className="btn-ghost btn-sm" onClick={() => navigate('/clients')}>
         <ArrowLeft size={15} /> Voltar
@@ -245,20 +264,36 @@ export function ClientDetailPage() {
             </div>
           </div>
 
-          <div className="flex gap-2 shrink-0">
+          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
             {editing ? (
               <>
                 <button className="btn-primary btn-sm" onClick={handleSave} disabled={loading}>
                   <Save size={14} /> Salvar
+                </button>
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => setEnrichOpen(true)}
+                  title="Enriquecer dados — preenche campos vazios para revisão"
+                >
+                  <Sparkles size={14} className="text-amber-400" />
                 </button>
                 <button className="btn-secondary btn-sm" onClick={() => { setEditing(false); setForm(client); setFieldErrors({}) }}>
                   <X size={14} />
                 </button>
               </>
             ) : (
-              <button className="btn-secondary btn-sm" onClick={() => setEditing(true)}>
-                <Edit2 size={14} /> Editar
-              </button>
+              <>
+                <button className="btn-secondary btn-sm" onClick={() => setEditing(true)}>
+                  <Edit2 size={14} /> Editar
+                </button>
+                <button
+                  className="btn-ghost btn-sm"
+                  onClick={() => { setEnrichOpen(true); setEditing(true) }}
+                  title="Enriquecer dados — preenche campos vazios para revisão"
+                >
+                  <Sparkles size={14} className="text-amber-400" />
+                </button>
+              </>
             )}
             <button className="btn-danger btn-sm" onClick={openDeleteConfirm} title="Excluir cliente">
               <Trash2 size={14} />
