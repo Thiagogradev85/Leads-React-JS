@@ -92,7 +92,9 @@ export async function searchWeb(query) {
   const creditsUsed = parseInt(response.headers.get('X-API-KEY-Usage-Count') || '0', 10)
 
   return {
-    organic: data.organic || [],
+    organic:       data.organic        || [],
+    knowledgeGraph: data.knowledgeGraph || null,
+    localResults:  data.local          || [],
     creditsUsed,
   }
 }
