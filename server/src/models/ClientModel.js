@@ -1,7 +1,7 @@
 import db from '../db/db.js'
 
 export const ClientModel = {
-  async list({ uf, status_id, ativo, ja_cliente, search, page = 1, limit = 50, sort = 'created_at' } = {}) {
+  async list({ uf, status_id, ativo, ja_cliente, catalogo_enviado, search, page = 1, limit = 50, sort = 'created_at' } = {}) {
     const conditions = []
     const params = []
 
@@ -27,6 +27,10 @@ export const ClientModel = {
     if (ja_cliente !== undefined) {
       params.push(ja_cliente)
       conditions.push(`c.ja_cliente = $${params.length}`)
+    }
+    if (catalogo_enviado !== undefined) {
+      params.push(catalogo_enviado)
+      conditions.push(`c.catalogo_enviado = $${params.length}`)
     }
     if (search) {
       // Divide em palavras, cada uma deve casar em pelo menos um campo (AND entre palavras)
@@ -168,7 +172,7 @@ export const ClientModel = {
     const {
       nome, cidade, uf, whatsapp, telefone, site, email, instagram, facebook, twitter, linkedin,
       responsavel, logradouro, numero, complemento, bairro, cep, cnpj,
-      ativo, nota, status_id, catalog_id, seller_id, ja_cliente
+      ativo, nota, status_id, catalog_id, seller_id, ja_cliente, catalogo_enviado
     } = data
 
     // Verifica status anterior para disparar eventos
@@ -199,13 +203,14 @@ export const ClientModel = {
         status_id   = COALESCE($21, status_id),
         catalog_id  = COALESCE($22, catalog_id),
         seller_id   = COALESCE($23, seller_id),
-        ja_cliente  = COALESCE($25, ja_cliente),
-        updated_at  = NOW()
+        ja_cliente        = COALESCE($25, ja_cliente),
+        catalogo_enviado  = COALESCE($26, catalogo_enviado),
+        updated_at        = NOW()
       WHERE id = $24
       RETURNING *
     `, [nome, cidade, uf, whatsapp, telefone, site, email, instagram, facebook, twitter, linkedin,
         responsavel, logradouro, numero, complemento, bairro, cep, cnpj,
-        ativo, nota, status_id, catalog_id, seller_id, id, ja_cliente])
+        ativo, nota, status_id, catalog_id, seller_id, id, ja_cliente, catalogo_enviado])
 
     const updated = rows[0]
     if (!updated) return null
@@ -230,13 +235,16 @@ export const ClientModel = {
         )
       }
 
-      // Dispara catalog_requested se mudou para "Catálogo"
+      // Dispara catalog_requested e seta flag permanente se mudou para "Catálogo"
       if (nomeStatus === 'Catálogo') {
         await db.query(
           `INSERT INTO daily_report_events (client_id, event_type, event_date)
            VALUES ($1, 'catalog_requested', (NOW() AT TIME ZONE 'America/Sao_Paulo')::date)
            ON CONFLICT DO NOTHING`,
           [id]
+        )
+        await db.query(
+          `UPDATE clients SET catalogo_enviado = true WHERE id = $1`, [id]
         )
       }
     }

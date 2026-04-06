@@ -120,8 +120,9 @@ export function ClientDetailPage() {
         status_id:   form.status_id  ? parseInt(form.status_id)  : null,
         catalog_id:  form.catalog_id ? parseInt(form.catalog_id) : null,
         seller_id:   form.seller_id  ? parseInt(form.seller_id)  : null,
-        ativo:       form.ativo,
-        ja_cliente:  form.ja_cliente,
+        ativo:            form.ativo,
+        ja_cliente:       form.ja_cliente,
+        catalogo_enviado: form.catalogo_enviado,
       })
       showModal({ type: 'success', title: 'Sucesso', message: 'Cliente atualizado!' })
       setEditing(false)
@@ -223,6 +224,11 @@ export function ClientDetailPage() {
               {client.ja_cliente && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-green-600/20 text-green-400 border border-green-600/30">
                   ✓ Cliente
+                </span>
+              )}
+              {client.catalogo_enviado && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold bg-pink-600/20 text-pink-400 border border-pink-600/30">
+                  ✓ Catálogo enviado
                 </span>
               )}
               {currentStatus && (
@@ -393,6 +399,11 @@ export function ClientDetailPage() {
                 <input type="checkbox" id="ja_cliente_edit" checked={!!form.ja_cliente}
                   onChange={e => set('ja_cliente', e.target.checked)} className="accent-green-500" />
                 <label htmlFor="ja_cliente_edit" className="text-sm text-zinc-300">Já é cliente (realizou compra)</label>
+              </div>
+              <div className="flex items-center gap-2">
+                <input type="checkbox" id="catalogo_enviado_edit" checked={!!form.catalogo_enviado}
+                  onChange={e => set('catalogo_enviado', e.target.checked)} className="accent-pink-500" />
+                <label htmlFor="catalogo_enviado_edit" className="text-sm text-zinc-300">Catálogo já enviado</label>
               </div>
               <div className="flex items-center gap-2">
                 <input type="checkbox" id="ativo_edit" checked={!!form.ativo}

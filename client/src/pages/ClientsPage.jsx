@@ -75,6 +75,9 @@ function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, 
         {c.ja_cliente && (
           <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-green-600/20 text-green-400 border border-green-600/30">Cliente</span>
         )}
+        {c.catalogo_enviado && (
+          <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-pink-600/20 text-pink-400 border border-pink-600/30">Catálogo</span>
+        )}
         {isCreatedToday(c.created_at) && (
           <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Novo</span>
         )}
@@ -207,7 +210,7 @@ export function ClientsPage() {
   const { overdueClients, showModal: showOverdueModal, dismiss: dismissOverdue } = useOverdueReminder(attentionDays)
 
   const [filters, setFilters] = useState(
-    () => savedFilters() || { search: '', status_id: '', uf: '', ativo: '', ja_cliente: '', page: 1 }
+    () => savedFilters() || { search: '', status_id: '', uf: '', ativo: '', ja_cliente: '', catalogo_enviado: '', page: 1 }
   )
 
   const load = useCallback(async () => {
@@ -415,11 +418,11 @@ export function ClientsPage() {
     })
   }
 
-  const EMPTY_FILTERS = { search: '', status_id: '', uf: '', ativo: '', ja_cliente: '', page: 1 }
+  const EMPTY_FILTERS = { search: '', status_id: '', uf: '', ativo: '', ja_cliente: '', catalogo_enviado: '', page: 1 }
 
   const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v, page: 1 }))
 
-  const hasActiveFilters = filters.search || filters.status_id || filters.uf || filters.ativo || filters.ja_cliente
+  const hasActiveFilters = filters.search || filters.status_id || filters.uf || filters.ativo || filters.ja_cliente || filters.catalogo_enviado
 
   function clearFilters() {
     setFilters(EMPTY_FILTERS)
@@ -845,6 +848,15 @@ export function ClientsPage() {
           <option value="">Prospects + Clientes</option>
           <option value="true">Só Clientes</option>
           <option value="false">Só Prospects</option>
+        </select>
+        <select
+          className="select w-auto"
+          value={filters.catalogo_enviado}
+          onChange={e => setFilter('catalogo_enviado', e.target.value)}
+        >
+          <option value="">Todos</option>
+          <option value="true">Com catálogo enviado</option>
+          <option value="false">Sem catálogo enviado</option>
         </select>
 
         {/* Toggle view mode */}
