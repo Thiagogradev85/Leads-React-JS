@@ -2,19 +2,21 @@ import { searchWeb } from './serper.js'
 
 // ── Helpers de extração ───────────────────────────────────────────────────────
 
+// Segmentos de URL do Instagram que não são handles de perfil
+const IG_BLOCKED = new Set([
+  'p', 'reel', 'reels', 'stories', 'explore', 'tv', 'accounts',
+  'about', 'help', 'legal', 'privacy', 'directory', 'hashtag',
+  'web', 'ar', 'share', 'sharer', 'login', 'signup', 'embed',
+])
+
 function extractInstagram(text) {
-  // URL completa: instagram.com/handle
-  const urlMatch = text.match(/(?:instagram\.com|instagr\.am)\/([A-Za-z0-9_.]{2,30})(?:[/?#]|$)/i)
-  if (urlMatch) {
-    const handle = urlMatch[1]
-    // Ignora segmentos genéricos da plataforma
-    if (!['p', 'reel', 'stories', 'explore', 'tv', 'accounts', 'about'].includes(handle.toLowerCase())) {
-      return handle
-    }
+  // Só extrai a partir de URL real: instagram.com/handle
+  // Nunca usa fallback @handle — muito propenso a falsos positivos
+  const matches = [...text.matchAll(/(?:instagram\.com|instagr\.am)\/([A-Za-z0-9_.]{3,30})(?:[/?#]|$)/gi)]
+  for (const m of matches) {
+    const handle = m[1]
+    if (!IG_BLOCKED.has(handle.toLowerCase())) return handle
   }
-  // @handle explícito
-  const atMatch = text.match(/@([A-Za-z0-9_.]{2,30})/)
-  if (atMatch) return atMatch[1]
   return null
 }
 
