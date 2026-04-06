@@ -45,12 +45,15 @@ PORT=8000
 NODE_ENV=development
 ```
 
-| Variável            | Obrigatória | Onde obter |
-|---------------------|-------------|------------|
-| `DATABASE_URL`      | ✅ | [neon.tech](https://neon.tech) → New Project → Connection String |
-| `ANTHROPIC_API_KEY` | ✅ | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| `SERPER_API_KEY`    | ✅ | [serper.dev](https://serper.dev) → Dashboard → API Key |
-| `PORT`              | — | Padrão: `8000` |
+| Variável            | Obrigatória | Usado em | Onde obter |
+|---------------------|-------------|----------|------------|
+| `DATABASE_URL`      | ✅ | Tudo | [neon.tech](https://neon.tech) → New Project → Connection String |
+| `SERPER_API_KEY`    | ✅ | Prospecção + Enriquecimento | [serper.dev](https://serper.dev) → Dashboard → API Key |
+| `ANTHROPIC_API_KEY` | Opcional | Só para importar catálogo por PDF | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| `PORT`              | — | — | Padrão: `8000` |
+
+> **Atenção:** o módulo de **Enriquecimento de Dados** usa apenas a `SERPER_API_KEY` — sem necessidade de chave Anthropic.
+> A `ANTHROPIC_API_KEY` só é exigida se você quiser importar catálogos de produtos a partir de arquivos PDF.
 
 ### 3. Criar as tabelas no banco
 
