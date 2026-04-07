@@ -273,6 +273,8 @@ export function ClientsPage() {
   const [newSection, setNewSection]         = useState([]) // para seção Novos no lazy mode
   // Chave para resetar o SearchInput ao limpar filtros
   const [searchKey, setSearchKey] = useState(0)
+  // Contador para forçar auto-load após invalidação do cache por broadcast
+  const [ufCacheVersion, setUfCacheVersion] = useState(0)
   const handleSearch = useCallback((val) => setFilter('search', val), [])
   const [statuses, setStatuses] = useState([])
   const [loading, setLoading]     = useState(false)
@@ -414,9 +416,26 @@ export function ClientsPage() {
     api.listStatuses().then(setStatuses)
   }, [])
 
+  // Ouve atualizações de outras abas (cliente salvo na tela de detalhe)
+  useEffect(() => {
+    let ch
+    try { ch = new BroadcastChannel('crm_clients') } catch { return }
+    ch.onmessage = (e) => {
+      if (e.data?.type !== 'client_updated') return
+      if (isStateView) {
+        // Invalida o cache e incrementa versão para re-trigger do auto-load
+        setUfCache(new Map())
+        setUfCacheVersion(v => v + 1)
+      } else {
+        load()
+      }
+    }
+    return () => ch.close()
+  }, [isStateView, load])
+
   useEffect(() => { load() }, [load])
 
-  // Auto-load das UFs que abrem automaticamente (filtro de UF ativo ou só 1 seção)
+  // Auto-load das UFs que abrem automaticamente (filtro de UF ativo, só 1 seção, ou após broadcast)
   useEffect(() => {
     if (!isStateView || ufSummary.length === 0) return
     ufSummary.forEach(({ uf }) => {
@@ -425,7 +444,7 @@ export function ClientsPage() {
       }
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ufSummary])
+  }, [ufSummary, ufCacheVersion])
 
   async function handleContact(client) {
     try {

@@ -169,6 +169,12 @@ export function ClientDetailPage() {
     showModal({ type: 'success', title: 'Sucesso', message: 'Cliente atualizado!' })
     setEditing(false)
     load()
+    // Notifica outras abas que este cliente foi atualizado
+    try {
+      const ch = new BroadcastChannel('crm_clients')
+      ch.postMessage({ type: 'client_updated', id: parseInt(id) })
+      ch.close()
+    } catch { /* navegadores antigos sem suporte */ }
   }
 
   async function handlePurchase() {
