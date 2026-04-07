@@ -180,6 +180,13 @@ export const ClientModel = {
     const previous = await this.get(id)
     if (!previous) return null
 
+    // Verificação de conflito em JS (evita problemas de precisão de microsegundos no SQL)
+    if (clientUpdatedAt) {
+      const dbMs     = new Date(previous.updated_at).getTime()
+      const clientMs = new Date(clientUpdatedAt).getTime()
+      if (dbMs !== clientMs) return 'CONFLICT'
+    }
+
     const { rows } = await db.query(`
       UPDATE clients SET
         nome        = COALESCE($1,  nome),
@@ -209,16 +216,13 @@ export const ClientModel = {
         catalogo_enviado  = COALESCE($26, catalogo_enviado),
         updated_at        = NOW()
       WHERE id = $24
-        AND ($27::timestamptz IS NULL OR updated_at = $27::timestamptz)
       RETURNING *
     `, [nome, cidade, uf, whatsapp, telefone, site, email, instagram, facebook, twitter, linkedin,
         responsavel, logradouro, numero, complemento, bairro, cep, cnpj,
-        ativo, nota, status_id, catalog_id, seller_id, id, ja_cliente, catalogo_enviado,
-        clientUpdatedAt ?? null])
+        ativo, nota, status_id, catalog_id, seller_id, id, ja_cliente, catalogo_enviado])
 
-    // Cliente existe mas updated_at não bateu → conflito de edição
     const updated = rows[0]
-    if (!updated) return 'CONFLICT'
+    if (!updated) return null
 
     // Rastreia se o evento catalog_requested já foi disparado via mudança de status
     let catalogEventFired = false
