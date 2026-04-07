@@ -76,6 +76,7 @@ export const ClientController = {
       if (nome !== undefined && !nome?.trim()) throw new AppError('Nome é obrigatório.', 422)
       if (uf   !== undefined && !uf?.trim())   throw new AppError('UF é obrigatória.', 422)
       const data = await ClientModel.update(req.params.id, req.body)
+      if (data === 'CONFLICT') throw new AppError('Este cliente foi alterado em outra aba ou sessão. Recarregue antes de salvar.', 409)
       if (!data) throw new AppError('Cliente não encontrado', 404)
       res.json(data)
     } catch (err) {

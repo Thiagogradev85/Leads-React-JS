@@ -99,41 +99,76 @@ export function ClientDetailPage() {
     setFieldErrors({})
     setLoading(true)
     try {
-      await api.updateClient(id, {
-        nome:        form.nome,
-        responsavel: form.responsavel,
-        cnpj:        form.cnpj,
-        cidade:      form.cidade,
-        uf:          form.uf,
-        cep:         form.cep,
-        logradouro:  form.logradouro,
-        numero:      form.numero,
-        complemento: form.complemento,
-        bairro:      form.bairro,
-        whatsapp:    form.whatsapp,
-        telefone:    form.telefone,
-        email:       form.email,
-        site:        form.site,
-        instagram:   form.instagram,
-        facebook:    form.facebook,
-        twitter:     form.twitter,
-        linkedin:    form.linkedin,
-        nota:        form.nota       ? parseInt(form.nota)       : null,
-        status_id:   form.status_id  ? parseInt(form.status_id)  : null,
-        catalog_id:  form.catalog_id ? parseInt(form.catalog_id) : null,
-        seller_id:   form.seller_id  ? parseInt(form.seller_id)  : null,
-        ativo:            form.ativo,
-        ja_cliente:       form.ja_cliente,
-        catalogo_enviado: form.catalogo_enviado,
-      })
-      showModal({ type: 'success', title: 'Sucesso', message: 'Cliente atualizado!' })
-      setEditing(false)
-      load()
+      await saveClient(form.updated_at)
     } catch (err) {
+      if (err.status === 409) {
+        setLoading(false)
+        showModal({
+          type: 'warning',
+          title: 'Conflito de edição',
+          message: 'Este cliente foi alterado em outra aba ou sessão desde que você o abriu.',
+          actions: [
+            {
+              label: 'Recarregar (descartar minhas alterações)',
+              variant: 'secondary',
+              onClick: () => { setEditing(false); load() },
+            },
+            {
+              label: 'Forçar salvar (sobrescrever)',
+              variant: 'danger',
+              onClick: async () => {
+                setLoading(true)
+                try {
+                  await saveClient(null)
+                } catch (e) {
+                  showModal({ type: 'error', title: 'Erro', message: e.message })
+                } finally {
+                  setLoading(false)
+                }
+              },
+            },
+          ],
+        })
+        return
+      }
       showModal({ type: 'error', title: 'Erro', message: err.message })
     } finally {
       setLoading(false)
     }
+  }
+
+  async function saveClient(updatedAt) {
+    await api.updateClient(id, {
+      nome:        form.nome,
+      responsavel: form.responsavel,
+      cnpj:        form.cnpj,
+      cidade:      form.cidade,
+      uf:          form.uf,
+      cep:         form.cep,
+      logradouro:  form.logradouro,
+      numero:      form.numero,
+      complemento: form.complemento,
+      bairro:      form.bairro,
+      whatsapp:    form.whatsapp,
+      telefone:    form.telefone,
+      email:       form.email,
+      site:        form.site,
+      instagram:   form.instagram,
+      facebook:    form.facebook,
+      twitter:     form.twitter,
+      linkedin:    form.linkedin,
+      nota:        form.nota       ? parseInt(form.nota)       : null,
+      status_id:   form.status_id  ? parseInt(form.status_id)  : null,
+      catalog_id:  form.catalog_id ? parseInt(form.catalog_id) : null,
+      seller_id:   form.seller_id  ? parseInt(form.seller_id)  : null,
+      ativo:            form.ativo,
+      ja_cliente:       form.ja_cliente,
+      catalogo_enviado: form.catalogo_enviado,
+      updated_at:       updatedAt ?? undefined,
+    })
+    showModal({ type: 'success', title: 'Sucesso', message: 'Cliente atualizado!' })
+    setEditing(false)
+    load()
   }
 
   async function handlePurchase() {

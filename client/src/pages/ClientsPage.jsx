@@ -58,16 +58,18 @@ function groupByUF(clients) {
 }
 
 // Linha individual de cliente (reutilizada em ambos os modos)
-function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, onDelete, onEnrich, navigate }) {
+function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, onDelete, onEnrich }) {
   return (
     <tr key={c.id}>
       <td className="max-w-[180px] break-words">
-        <button
+        <a
+          href={`/clients/${c.id}`}
+          target="_blank"
+          rel="noopener noreferrer"
           className="text-sky-400 hover:text-sky-300 font-medium text-left break-words"
-          onClick={() => navigate(`/clients/${c.id}`)}
         >
           {c.nome}
-        </button>
+        </a>
         {isAttention && (
           <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
             <AlertTriangle size={10} /> Atenção
@@ -139,13 +141,15 @@ function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, 
               {alreadyContacted ? 'Contatado ✓' : 'Contatado'}
             </span>
           </button>
-          <button
+          <a
+            href={`/clients/${c.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
             className="btn-ghost btn-sm"
-            onClick={() => navigate(`/clients/${c.id}`)}
             title="Ver detalhes"
           >
             <Eye size={13} />
-          </button>
+          </a>
           <button
             className="btn-ghost btn-sm"
             onClick={() => onEnrich(c)}
