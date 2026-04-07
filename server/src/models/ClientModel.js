@@ -1,6 +1,18 @@
 import db from '../db/db.js'
 
 export const ClientModel = {
+  // Retorna lista de UFs cadastradas com contagem de clientes ativos
+  async listUFs() {
+    const { rows } = await db.query(`
+      SELECT COALESCE(uf, '—') AS uf, COUNT(*)::int AS count
+      FROM clients
+      WHERE ativo = true
+      GROUP BY uf
+      ORDER BY uf NULLS LAST
+    `)
+    return rows
+  },
+
   async list({ uf, status_id, ativo, ja_cliente, catalogo_enviado, search, page = 1, limit = 50, sort = 'created_at' } = {}) {
     const conditions = []
     const params = []

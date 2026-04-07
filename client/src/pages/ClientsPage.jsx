@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, Search, Upload, Phone, Star, Eye, UserX, RefreshCw,
@@ -58,7 +58,7 @@ function groupByUF(clients) {
 }
 
 // Linha individual de cliente (reutilizada em ambos os modos)
-function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, onDelete, onEnrich }) {
+const ClientRow = memo(function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, onDelete, onEnrich }) {
   return (
     <tr key={c.id}>
       <td className="max-w-[180px] break-words">
@@ -180,9 +180,9 @@ function ClientRow({ c, alreadyContacted, isAttention, onContact, onDeactivate, 
       </td>
     </tr>
   )
-}
+})
 
-function UFSection({ uf, rows, tableHead, contactedToday, rowProps, isOpen, onToggle }) {
+const UFSection = memo(function UFSection({ uf, rows, tableHead, contactedToday, rowProps, isOpen, onToggle, loadingRows }) {
   return (
     <div className="table-wrapper">
       <button
@@ -192,7 +192,7 @@ function UFSection({ uf, rows, tableHead, contactedToday, rowProps, isOpen, onTo
         <MapPin size={14} className="text-sky-400" />
         <span className="font-semibold text-zinc-100 text-sm">{uf}</span>
         <span className="text-zinc-500 text-xs">
-          {rows.length} cliente{rows.length !== 1 ? 's' : ''}
+          {rows ? `${rows.length} cliente${rows.length !== 1 ? 's' : ''}` : '...'}
         </span>
         {isOpen
           ? <ChevronUp size={14} className="ml-auto text-zinc-600" />
@@ -200,23 +200,39 @@ function UFSection({ uf, rows, tableHead, contactedToday, rowProps, isOpen, onTo
         }
       </button>
       {isOpen && (
-        <table className="table">
-          {tableHead}
-          <tbody>
-            {rows.map(c => (
-              <ClientRow key={c.id} c={c} alreadyContacted={contactedToday.has(c.id)} {...rowProps} />
-            ))}
-          </tbody>
-        </table>
+        loadingRows
+          ? <div className="flex items-center justify-center py-6 text-zinc-500 text-sm gap-2">
+              <Loader2 size={15} className="animate-spin" /> Carregando...
+            </div>
+          : rows?.length > 0
+            ? <table className="table">
+                {tableHead}
+                <tbody>
+                  {rows.map(c => (
+                    <ClientRow key={c.id} c={c} alreadyContacted={contactedToday.has(c.id)} {...rowProps} />
+                  ))}
+                </tbody>
+              </table>
+            : <div className="py-4 text-center text-zinc-600 text-sm">Nenhum cliente</div>
       )}
     </div>
   )
-}
+})
 
 export function ClientsPage() {
   const navigate = useNavigate()
   const [clients, setClients]   = useState([])
   const [total, setTotal]       = useState(0)
+  // Lazy load (state view sem filtros)
+  const [ufSummary, setUfSummary]         = useState([])   // [{uf, count}]
+  const [ufCache, setUfCache]             = useState(new Map()) // uf → {data, loading}
+  const [overdueSection, setOverdueSection] = useState([]) // para seção Atenção no lazy mode
+  const [newSection, setNewSection]         = useState([]) // para seção Novos no lazy mode
+  // Debounce search
+  const [searchValue, setSearchValue] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY))?.search || '' } catch { return '' }
+  })
+  const searchTimer = useRef(null)
   const [statuses, setStatuses] = useState([])
   const [loading, setLoading]     = useState(false)
   const [importing, setImporting] = useState(false)
@@ -257,7 +273,9 @@ export function ClientsPage() {
   function toggleUF(uf) {
     setOpenUFs(prev => {
       const next = new Map(prev)
-      next.set(uf, !next.get(uf))
+      const opening = !next.get(uf)
+      next.set(uf, opening)
+      if (opening && isLazyMode) loadUF(uf)
       return next
     })
   }
@@ -274,33 +292,69 @@ export function ClientsPage() {
     () => savedFilters() || { search: '', status_id: '', uf: '', ativo: '', ja_cliente: '', catalogo_enviado: '', page: 1 }
   )
 
+  // Lazy mode: state view sem nenhum filtro ativo
+  const isLazyMode = viewMode === 'state'
+    && !filters.search && !filters.status_id && !filters.ativo
+    && !filters.ja_cliente && !filters.catalogo_enviado
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const base = Object.fromEntries(
-        Object.entries(filters).filter(([, v]) => v !== '')
-      )
-
-      let params
-      if (viewMode === 'state') {
-        params = { ...base, sort: 'uf', limit: 9999, page: 1 }
-      } else {
-        // Lista: busca todos para poder exibir seção Atenção e paginar no frontend
-        params = { ...base, limit: 9999, page: 1 }
-      }
-
-      const result = await api.listClients(params)
-      setClients(result.data)
-      setTotal(result.total)
-
-      // Verifica quais clientes já foram contatados hoje
-      const today = new Date().toLocaleDateString('en-CA') // data local do usuário
-      const details = await api.getReportDetails(today)
+      const today = new Date().toLocaleDateString('en-CA')
+      const [details] = await Promise.all([api.getReportDetails(today)])
       setContactedToday(new Set(details.details.contacted.map(c => c.client_id)))
+
+      if (isLazyMode) {
+        // Carrega apenas UFs + contagem + seções especiais (Atenção e Novos)
+        const [ufData, overdueData, newData] = await Promise.all([
+          api.listClientUFs(),
+          api.getOverdueClients(attentionDays),
+          api.listClients({ sort: 'created_at_desc', limit: 100 }),
+        ])
+        setUfSummary(ufData)
+        setTotal(ufData.reduce((s, r) => s + r.count, 0))
+        setOverdueSection(overdueData)
+        setNewSection(newData.data.filter(c => isCreatedToday(c.created_at)))
+        setUfCache(new Map()) // invalida cache de UFs ao recarregar
+        setClients([])
+      } else {
+        // Com filtros ou list view: carrega clientes normalmente
+        const base = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+        const params = viewMode === 'list'
+          ? { ...base, limit: 50, page: filters.page || 1 }
+          : { ...base, sort: 'uf', limit: 9999, page: 1 }
+        const result = await api.listClients(params)
+        setClients(result.data)
+        setTotal(result.total)
+      }
     } finally {
       setLoading(false)
     }
-  }, [filters, viewMode])
+  }, [filters, viewMode, isLazyMode, attentionDays])
+
+  // Carrega clientes de uma UF específica no lazy mode (com cache)
+  const loadUF = useCallback(async (uf) => {
+    setUfCache(prev => {
+      if (prev.get(uf)?.data || prev.get(uf)?.loading) return prev
+      const next = new Map(prev)
+      next.set(uf, { data: null, loading: true })
+      return next
+    })
+    try {
+      const result = await api.listClients({ uf, limit: 9999 })
+      setUfCache(prev => {
+        const next = new Map(prev)
+        next.set(uf, { data: result.data, loading: false })
+        return next
+      })
+    } catch {
+      setUfCache(prev => {
+        const next = new Map(prev)
+        next.set(uf, { data: [], loading: false })
+        return next
+      })
+    }
+  }, [])
 
   useEffect(() => {
     api.listStatuses().then(setStatuses)
@@ -496,6 +550,7 @@ export function ClientsPage() {
 
   function clearFilters() {
     setFilters(EMPTY_FILTERS)
+    setSearchValue('')
     sessionStorage.removeItem(FILTERS_KEY)
   }
 
@@ -507,7 +562,7 @@ export function ClientsPage() {
     setContactSort(s => s === null ? 'asc' : s === 'asc' ? 'desc' : null)
   }
 
-  const tableHead = (
+  const tableHead = useMemo(() => (
     <thead>
       <tr>
         <th>
@@ -538,11 +593,19 @@ export function ClientsPage() {
         <th>Ações</th>
       </tr>
     </thead>
-  )
+  ), [nameSort, contactSort])
 
-  const rowProps = { contactedToday, onContact: handleContact, onDeactivate: handleDeactivate, onDelete: handleDelete, onEnrich: (c) => setEnrichModal({ clientIds: [c.id] }), navigate }
+  const handleEnrich = useCallback((c) => setEnrichModal({ clientIds: [c.id] }), [])
+  const rowProps = useMemo(() => ({
+    contactedToday,
+    onContact:    handleContact,
+    onDeactivate: handleDeactivate,
+    onDelete:     handleDelete,
+    onEnrich:     handleEnrich,
+    navigate,
+  }), [contactedToday, handleContact, handleDeactivate, handleDelete, handleEnrich, navigate])
 
-  function sortClients(arr) {
+  const sortClients = useCallback((arr) => {
     return [...arr].sort((a, b) => {
       if (contactSort) {
         const dateA = a.ultimo_contato ? new Date(a.ultimo_contato).getTime() : null
@@ -560,13 +623,15 @@ export function ClientsPage() {
       const cmp = (a.nome || '').localeCompare(b.nome || '', 'pt-BR', { sensitivity: 'base' })
       return nameSort === 'asc' ? cmp : -cmp
     })
-  }
+  }, [nameSort, contactSort])
 
   // ── Seção Atenção reutilizável (estado e lista) ─────────────────────────────
-  function renderAttentionSection(isOpen, setIsOpen) {
-    const allOverdue      = clients.filter(c => isOverdue(c, attentionDays))
+  // overdueOverride: quando fornecido, usa esses dados em vez de calcular do clients[]
+  function renderAttentionSection(isOpen, setIsOpen, overdueOverride) {
+    const allOverdue      = overdueOverride ?? clients.filter(c => isOverdue(c, attentionDays))
+    const ufPool          = overdueOverride ? overdueOverride : clients
     const filteredOverdue = allOverdue.filter(c => !attentionIgnoredUFs.has(c.uf || '—'))
-    const ufOptions       = [...new Set([...clients.map(c => c.uf || '—'), ...attentionIgnoredUFs])].sort()
+    const ufOptions       = [...new Set([...ufPool.map(c => c.uf || '—'), ...attentionIgnoredUFs])].sort()
 
     if (allOverdue.length === 0 && attentionIgnoredUFs.size === 0) return null
 
@@ -665,22 +730,80 @@ export function ClientsPage() {
 
   // ── Render modo "Por Estado" ────────────────────────────────────────────────
   function renderStateView() {
+    if (isLazyMode) {
+      // ── Modo lazy: sem filtros ativos ──────────────────────────────────────
+      if (!loading && ufSummary.length === 0 && overdueSection.length === 0 && newSection.length === 0)
+        return <EmptyState icon={Search} message="Nenhum cliente encontrado" />
+
+      return (
+        <div className="space-y-6">
+          {renderAttentionSection(attentionOpen, setAttentionOpen, overdueSection)}
+
+          {newSection.length > 0 && (
+            <div className="table-wrapper">
+              <button
+                className="w-full flex items-center gap-2 px-4 py-2 bg-emerald-950 border-b border-emerald-800 hover:bg-emerald-900/60 transition-colors text-left"
+                onClick={() => setNewClientsOpen(v => !v)}
+              >
+                <Sparkles size={14} className="text-emerald-400" />
+                <span className="font-semibold text-emerald-300 text-sm">Novos</span>
+                <span className="text-emerald-600 text-xs">
+                  {newSection.length} cliente{newSection.length !== 1 ? 's' : ''} cadastrado{newSection.length !== 1 ? 's' : ''} hoje
+                </span>
+                {newClientsOpen
+                  ? <ChevronUp size={14} className="ml-auto text-emerald-700" />
+                  : <ChevronDown size={14} className="ml-auto text-emerald-700" />
+                }
+              </button>
+              {newClientsOpen && (
+                <table className="table">
+                  {tableHead}
+                  <tbody>
+                    {sortClients(newSection).map(c => (
+                      <ClientRow key={c.id} c={c} alreadyContacted={contactedToday.has(c.id)} {...rowProps} />
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {ufSummary.map(({ uf, count }) => {
+            const cached      = ufCache.get(uf)
+            const rows        = cached?.data ? sortClients(cached.data) : null
+            const loadingRows = cached?.loading ?? false
+            const isOpen      = isUFOpen(uf, ufSummary.length)
+            return (
+              <UFSection
+                key={uf}
+                uf={uf}
+                rows={rows ?? (isOpen ? [] : [{ id: '__placeholder' }])}
+                tableHead={tableHead}
+                contactedToday={contactedToday}
+                rowProps={rowProps}
+                isOpen={isOpen}
+                onToggle={() => toggleUF(uf)}
+                loadingRows={loadingRows || (isOpen && !cached)}
+              />
+            )
+          })}
+        </div>
+      )
+    }
+
+    // ── Modo full load: com filtros ativos ────────────────────────────────────
     const newClients    = clients.filter(c => isCreatedToday(c.created_at))
     const allOverdue    = clients.filter(c => isOverdue(c, attentionDays))
-    const normalClients = clients
-
-    const grouped   = groupByUF(normalClients)
-    const sortedUFs = Object.keys(grouped).sort((a, b) => a.localeCompare(b))
+    const grouped       = groupByUF(clients)
+    const sortedUFs     = Object.keys(grouped).sort((a, b) => a.localeCompare(b))
 
     if (newClients.length === 0 && allOverdue.length === 0 && sortedUFs.length === 0)
       return <EmptyState icon={Search} message="Nenhum cliente encontrado" />
 
     return (
       <div className="space-y-6">
-        {/* Seção Atenção — clientes sem contato há mais de 3 dias */}
         {renderAttentionSection(attentionOpen, setAttentionOpen)}
 
-        {/* Seção Novos — clientes criados hoje */}
         {newClients.length > 0 && (
           <div className="table-wrapper">
             <button
@@ -710,7 +833,6 @@ export function ClientsPage() {
           </div>
         )}
 
-        {/* Seções por UF */}
         {sortedUFs.map(uf => (
           <UFSection
             key={uf}
@@ -727,26 +849,22 @@ export function ClientsPage() {
     )
   }
 
-  // ── Render modo "Lista" ─────────────────────────────────────────────────────
+  // ── Render modo "Lista" — paginação real no backend ─────────────────────────
   function renderListView() {
-    if (clients.length === 0) return <EmptyState icon={Search} message="Nenhum cliente encontrado" />
+    if (clients.length === 0 && !loading) return <EmptyState icon={Search} message="Nenhum cliente encontrado" />
 
-    const normalClients  = sortClients(clients.filter(c => !isOverdue(c, attentionDays)))
-    const totalPages     = Math.ceil(normalClients.length / 50)
-    const pageClients    = normalClients.slice((filters.page - 1) * 50, filters.page * 50)
+    const totalPages = Math.ceil(total / 50)
 
     return (
       <>
-        {/* Seção Atenção */}
         {renderAttentionSection(listAttentionOpen, setListAttentionOpen)}
 
-        {/* Tabela principal (sem clientes em atraso) */}
-        {pageClients.length > 0 && (
+        {clients.length > 0 && (
           <div className="table-wrapper">
             <table className="table">
               {tableHead}
               <tbody>
-                {pageClients.map(c => (
+                {sortClients(clients).map(c => (
                   <ClientRow
                     key={c.id}
                     c={c}
@@ -759,8 +877,7 @@ export function ClientsPage() {
           </div>
         )}
 
-        {/* Paginação */}
-        {normalClients.length > 50 && (
+        {totalPages > 1 && (
           <div className="flex gap-2 justify-end text-sm">
             <button
               className="btn-secondary btn-sm"
@@ -894,8 +1011,13 @@ export function ClientsPage() {
           <input
             className="input pl-8"
             placeholder="Buscar nome, cidade..."
-            value={filters.search}
-            onChange={e => setFilter('search', e.target.value)}
+            value={searchValue}
+            onChange={e => {
+              const val = e.target.value
+              setSearchValue(val)
+              clearTimeout(searchTimer.current)
+              searchTimer.current = setTimeout(() => setFilter('search', val), 300)
+            }}
           />
         </div>
         <select
