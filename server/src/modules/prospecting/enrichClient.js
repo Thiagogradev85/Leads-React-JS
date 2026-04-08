@@ -97,12 +97,17 @@ function extractCityFromAddress(address, uf) {
   const ufUpper = uf.toUpperCase()
 
   // Padrões: "Cidade, UF" | "Cidade - UF" | "Cidade / UF"
+  // Exige separador (vírgula, traço, barra ou início de string) ANTES da cidade
+  // para evitar capturar nomes de pessoas que precedem o endereço
+  // Ex: "Gustavo Silva, Florianópolis, SC" → captura "Florianópolis", não "Gustavo Silva"
   const pattern = new RegExp(
-    String.raw`([A-Za-zÀ-ÖØ-öø-ÿ]+(?:[\s-][A-Za-zÀ-ÖØ-öø-ÿ]+){0,4})\s*[,\-/]\s*${ufUpper}`,
-    'i'
+    String.raw`(?:^|[,/\-])\s*([A-Za-zÀ-ÖØ-öø-ÿ]+(?:[\s\-][A-Za-zÀ-ÖØ-öø-ÿ]+){0,3})\s*[,\-/]\s*${ufUpper}`,
+    'gi'
   )
-  const m = address.match(pattern)
-  if (!m) return null
+  const allMatches = [...address.matchAll(pattern)]
+  if (allMatches.length === 0) return null
+  // Usa o ÚLTIMO match — mais próximo do UF, menos chance de ser nome de pessoa
+  const m = allMatches[allMatches.length - 1]
 
   const city = m[1].trim()
   if (city.length < 3 || city.length > 60) return null
