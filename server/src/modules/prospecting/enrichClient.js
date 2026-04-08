@@ -1,4 +1,5 @@
-import { searchWeb } from './serper.js'
+import { searchWeb }    from './serper.js'
+import { validateCity } from './ibgeCities.js'
 
 // ── Helpers de extração ───────────────────────────────────────────────────────
 
@@ -396,6 +397,13 @@ export async function enrichClient(client) {
         }
       }
     } catch { /* falha silenciosa — não bloqueia */ }
+  }
+
+  // ── Valida cidade contra a lista oficial de municípios do IBGE ──────────────
+  // Descarta se não for um município real do estado (ex: "Sesc", "SIM", "Shopping")
+  if (cidade && !client.cidade && uf) {
+    const valid = await validateCity(cidade, uf)
+    if (!valid) cidade = null
   }
 
   // ── Monta resultado final (só campos realmente ausentes no cliente) ───────────
