@@ -6,7 +6,7 @@ import {
   Mail, Facebook, Twitter, Linkedin, MapPin, Sparkles
 } from 'lucide-react'
 import { api } from '../utils/api.js'
-import { formatDate, formatDateTime, statusPill, NOTAS, UFS, whatsappLink, instagramLink, facebookLink, twitterLink, linkedinLink, broadcastClient } from '../utils/constants.js'
+import { formatDate, formatDateTime, statusPill, NOTAS, UFS, whatsappLink, instagramLink, facebookLink, twitterLink, linkedinLink, broadcastClient, socialHandle } from '../utils/constants.js'
 import { useModal } from '../hooks/useModal.js'
 import { EnrichModal } from '../components/EnrichModal.jsx'
 
@@ -556,8 +556,8 @@ export function ClientDetailPage() {
                 <div>
                   <p className="label">Instagram</p>
                   <a href={instagramLink(client.instagram)} target="_blank" rel="noreferrer"
-                    className="text-pink-400 hover:text-pink-300 flex items-center gap-1">
-                    <Instagram size={13} /> {client.instagram}
+                    className="text-pink-400 hover:text-pink-300 flex items-center gap-1 truncate">
+                    <Instagram size={13} className="shrink-0" /> @{socialHandle(client.instagram)}
                   </a>
                 </div>
               )}
@@ -565,8 +565,8 @@ export function ClientDetailPage() {
                 <div>
                   <p className="label">Facebook</p>
                   <a href={facebookLink(client.facebook)} target="_blank" rel="noreferrer"
-                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1">
-                    <Facebook size={13} /> {client.facebook}
+                    className="text-blue-400 hover:text-blue-300 flex items-center gap-1 truncate">
+                    <Facebook size={13} className="shrink-0" /> {socialHandle(client.facebook)}
                   </a>
                 </div>
               )}

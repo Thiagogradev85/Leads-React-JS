@@ -44,19 +44,36 @@ export function isCelular(digits) {
 // Gera link do Instagram (aceita @usuario, usuario ou URL completa)
 export function instagramLink(raw) {
   if (!raw) return null
-  const s = String(raw).trim()
-  if (!s) return null
-  if (s.startsWith('http')) return s
-  const username = s.replace(/^@/, '').replace(/\/$/, '')
-  return `https://instagram.com/${username}`
+  const handle = socialHandle(raw)
+  if (!handle) return null
+  return `https://instagram.com/${handle}`
 }
 
 export function facebookLink(raw) {
   if (!raw) return null
+  const handle = socialHandle(raw)
+  if (!handle) return null
+  return `https://facebook.com/${handle}`
+}
+
+/**
+ * Extrai só o handle/slug de uma URL de rede social para exibição.
+ * Ex: "https://instagram.com/bikeloja?utm_source=..." → "@bikeloja"
+ *     "https://facebook.com/bikeloja"                → "bikeloja"
+ *     "@bikeloja"                                     → "@bikeloja"
+ *     "bikeloja"                                      → "bikeloja"
+ */
+export function socialHandle(raw, prefix = '') {
+  if (!raw) return ''
   const s = String(raw).trim()
-  if (!s) return null
-  if (s.startsWith('http')) return s
-  return `https://facebook.com/${s.replace(/^\//, '')}`
+  if (!s) return ''
+  if (s.startsWith('http')) {
+    try {
+      const path = new URL(s).pathname.replace(/^\//, '').split('/')[0].split('?')[0]
+      if (path) return `${prefix}${path}`
+    } catch { /* URL inválida — cai no fallback */ }
+  }
+  return `${prefix}${s.replace(/^@/, '')}`
 }
 
 export function twitterLink(raw) {
