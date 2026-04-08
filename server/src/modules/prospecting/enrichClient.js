@@ -409,18 +409,16 @@ export async function enrichClient(client) {
     if (!email) email = extractEmail(JSON.stringify(emailRes.value))
   }
 
-  // ── Fallback Instagram: busca só pelo nome, sem cidade/UF, sem aspas ────────
+  // ── Fallback Instagram A: busca só pelo nome sem cidade/UF (site:instagram.com) ──
   if (!instagram) {
     try {
       const igFallback = await searchWeb(`${client.nome} site:instagram.com`)
       if (igFallback?.organic?.length) {
-        // Tenta link primeiro
         for (const r of igFallback.organic) {
           if (!r.link?.includes('instagram.com')) continue
           const handle = extractInstagram(r.link)
           if (handle) { instagram = handle; break }
         }
-        // Tenta título/snippet (padrão "(@handle) • Instagram")
         if (!instagram) {
           for (const r of igFallback.organic.slice(0, 5)) {
             const text = [r.title, r.snippet].filter(Boolean).join(' ')
@@ -429,7 +427,40 @@ export async function enrichClient(client) {
           }
         }
       }
-    } catch { /* falha silenciosa — não bloqueia */ }
+    } catch { /* falha silenciosa */ }
+  }
+
+  // ── Fallback Instagram B: busca livre "nome instagram" (sem site:) ───────────
+  // Captura casos onde site:instagram.com só retorna posts/reels bloqueados,
+  // mas uma busca normal encontra o perfil via link direto nos resultados
+  if (!instagram) {
+    try {
+      const igFree = await searchWeb(`${base} instagram perfil`)
+      if (igFree?.organic?.length) {
+        // Prioriza links diretos ao instagram.com com correspondência de nome
+        for (const r of igFree.organic.slice(0, 10)) {
+          if (!r.link?.includes('instagram.com')) continue
+          const handle = extractInstagram(r.link)
+          if (handle && nameMatchesHandle(client.nome, handle)) { instagram = handle; break }
+        }
+        // Aceita qualquer link instagram.com
+        if (!instagram) {
+          for (const r of igFree.organic.slice(0, 10)) {
+            if (!r.link?.includes('instagram.com')) continue
+            const handle = extractInstagram(r.link)
+            if (handle) { instagram = handle; break }
+          }
+        }
+        // Tenta título/snippet (padrão "(@handle) • Instagram")
+        if (!instagram) {
+          for (const r of igFree.organic.slice(0, 5)) {
+            const text = [r.title, r.snippet].filter(Boolean).join(' ')
+            const handle = extractInstagram(text)
+            if (handle && nameMatchesHandle(client.nome, handle)) { instagram = handle; break }
+          }
+        }
+      }
+    } catch { /* falha silenciosa */ }
   }
 
   // ── Valida cidade contra a lista oficial de municípios do IBGE ──────────────
