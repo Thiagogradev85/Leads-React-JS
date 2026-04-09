@@ -95,11 +95,12 @@ export function linkedinLink(raw) {
 
 export function whatsappLink(raw) {
   if (!raw) return null
-  const digits = String(raw).replace(/\D/g, '')
+  let digits = String(raw).replace(/\D/g, '')
   if (!digits) return null
-  // WhatsApp aceita fixos e celulares — sempre gera o link
-  const number = digits.length <= 11 ? `55${digits}` : digits
-  return `https://wa.me/${number}`
+  // Remove o DDI 55 se já estiver presente, depois sempre adiciona
+  // Evita duplicar o 55 em números salvos como "5551936329332"
+  if (digits.startsWith('55') && digits.length > 11) digits = digits.slice(2)
+  return `https://wa.me/55${digits}`
 }
 
 export function statusPill(cor) {
