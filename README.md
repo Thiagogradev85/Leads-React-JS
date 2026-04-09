@@ -160,7 +160,7 @@ Módulo dedicado acessível pelo menu lateral em **Enriquecimento**. Permite bus
 - `[nome] [cidade] contato telefone email whatsapp` — dados gerais, knowledge graph do Google
 - `"[nome]" [cidade] site:instagram.com` — perfil direto; fallback sem cidade se necessário
 - `"[nome]" [cidade] site:facebook.com` — extrai slug, telefone, e-mail e Instagram dos snippets e sitelinks
-- `"[nome]" email contato` — busca dedicada de e-mail (nova em v1.6.0)
+- `"[nome]" email contato` — busca dedicada de e-mail
 - Captura menções explícitas como `"Instagram: @handle"` nos snippets do Facebook
 - O usuário revisa cada campo sugerido com checkboxes — nenhum dado é salvo automaticamente
 - Suporta lotes de 20 clientes com barra de progresso
@@ -235,6 +235,24 @@ Se o servidor estiver offline à meia-noite, o reset ocorre automaticamente na p
 | App (Static) | `client` | `npm ci && npm run build` | —           |
 
 Variáveis necessárias no Render: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `SERPER_API_KEY`, `NODE_ENV=production`.
+
+---
+
+## Changelog
+
+### v1.7.0
+- **SerpApi como fallback automático** quando créditos do Serper se esgotam — modal com data de reset
+- **ENRICH_SEGMENT**: direciona o enriquecimento ao segmento de negócio (evita resultados irrelevantes)
+- Estratégias de Instagram aprimoradas: padrão de título `(@handle) • Instagram`, fallback sem cidade, busca livre
+- Validação de cidade extraída contra API oficial do IBGE
+- Importação de Excel: rejeita linhas com nome inválido (só números), detecta coluna de nome por conteúdo
+- Máscara de CNPJ nos formulários (onBlur formata automaticamente)
+- Normalização de telefone: remove DDI `55` duplicado ao sair do campo e no enriquecimento
+- Links de WhatsApp corrigidos para números salvos com `55` na frente
+- Broadcast de eventos entre abas no CRUD completo de clientes
+
+### v1.6.0
+- Multi-abas, performance e lazy loading
 
 ---
 
