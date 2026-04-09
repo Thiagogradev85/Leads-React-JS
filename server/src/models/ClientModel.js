@@ -24,16 +24,19 @@ export const ClientModel = {
     }
     if (search) {
       const words = search.trim().split(/\s+/).filter(Boolean)
-      for (const word of words) {
-        const n = params.length + 1
-        params.push(`%${word}%`)
-        conditions.push(`(
-          unaccent(c.nome)      ILIKE unaccent($${n}) OR
-          unaccent(c.cidade)    ILIKE unaccent($${n}) OR
-          c.whatsapp            ILIKE $${n}           OR
-          unaccent(c.instagram) ILIKE unaccent($${n})
-        )`)
-      }
+      const wordConditions = (field) =>
+        words.map(w => {
+          params.push(`%${w}%`)
+          return `unaccent(${field}) ILIKE unaccent($${params.length})`
+        }).join(' AND ')
+      params.push(`%${search.trim()}%`)
+      const nPhone = params.length
+      conditions.push(`(
+        (${wordConditions('c.nome')}) OR
+        (${wordConditions('c.cidade')}) OR
+        c.whatsapp            ILIKE $${nPhone} OR
+        unaccent(c.instagram) ILIKE unaccent($${nPhone})
+      )`)
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
@@ -79,18 +82,25 @@ export const ClientModel = {
       conditions.push(`c.catalogo_enviado = $${params.length}`)
     }
     if (search) {
-      // Divide em palavras, cada uma deve casar em pelo menos um campo (AND entre palavras)
+      // Todas as palavras devem casar no MESMO campo (evita falsos positivos onde
+      // "Bike" casa no nome e "Sul" casa na cidade de outro cliente)
       const words = search.trim().split(/\s+/).filter(Boolean)
-      for (const word of words) {
-        params.push(`%${word}%`)
-        const n = params.length
-        conditions.push(`(
-          unaccent(c.nome)      ILIKE unaccent($${n}) OR
-          unaccent(c.cidade)    ILIKE unaccent($${n}) OR
-          c.whatsapp            ILIKE $${n}            OR
-          unaccent(c.instagram) ILIKE unaccent($${n})
-        )`)
-      }
+      const wordConditions = (field) =>
+        words.map((w, i) => {
+          params.push(`%${w}%`)
+          return `unaccent(${field}) ILIKE unaccent($${params.length})`
+        }).join(' AND ')
+
+      // Para whatsapp/instagram usa a frase completa (não faz sentido dividir dígitos)
+      params.push(`%${search.trim()}%`)
+      const nPhone = params.length
+
+      conditions.push(`(
+        (${wordConditions('c.nome')}) OR
+        (${wordConditions('c.cidade')}) OR
+        c.whatsapp            ILIKE $${nPhone} OR
+        unaccent(c.instagram) ILIKE unaccent($${nPhone})
+      )`)
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
