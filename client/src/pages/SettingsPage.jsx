@@ -166,8 +166,28 @@ export function SettingsPage() {
     }
   }
 
-  // ── Salvar chave individual ──
-  async function handleSave(key) {
+  // ── Salvar com confirmação se chave vier do Render ──
+  function handleSave(key) {
+    const entry = getConfigEntry(key)
+    if (entry?.source === 'env' || entry?.source === 'env+db') {
+      showModal({
+        type: 'warning',
+        title: 'Atenção: chave configurada no Render',
+        message: `"${key}" está sendo fornecida pelo Render via variável de ambiente. Se salvar aqui, o valor do banco passará a ser usado no lugar. Para voltar ao Render depois, use o botão 🗑️ para limpar.`,
+        actions: [
+          {
+            label: 'Sim, salvar no banco mesmo assim',
+            variant: 'danger',
+            onClick: () => doSave(key),
+          },
+        ],
+      })
+      return
+    }
+    doSave(key)
+  }
+
+  async function doSave(key) {
     const value = values[key]
     if (!value) return
     setSaving(s => ({ ...s, [key]: true }))
