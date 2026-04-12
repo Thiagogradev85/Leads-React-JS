@@ -68,7 +68,7 @@ const GROUPS = [
         label: 'Google CSE CX',
         description: 'ID do seu mecanismo de busca no Google CSE.',
         placeholder: 'xxxxxxxxxxxxxxx',
-        testable: true,
+        testable: false,
       },
       {
         key: 'BRAVE_SEARCH_KEY',
@@ -253,6 +253,52 @@ export function SettingsPage() {
       })
     } finally {
       setTesting(t => ({ ...t, [key]: false }))
+    }
+  }
+
+  // ── Testar Google CSE (KEY + CX juntos) ──
+  async function handleTestCSE() {
+    setTesting(t => ({ ...t, GOOGLE_CSE_KEY: true }))
+    try {
+      const pwd = sessionStorage.getItem('settings_password') || password
+      // Salva valores digitados pendentes antes de testar
+      const toSave = {}
+      if (values['GOOGLE_CSE_KEY']) toSave['GOOGLE_CSE_KEY'] = values['GOOGLE_CSE_KEY']
+      if (values['GOOGLE_CSE_CX'])  toSave['GOOGLE_CSE_CX']  = values['GOOGLE_CSE_CX']
+      if (Object.keys(toSave).length > 0) {
+        await api.saveSettings(pwd, toSave)
+      }
+      const data = await api.testSetting(pwd, 'GOOGLE_CSE_KEY')
+      if (data.ok) {
+        showModal({ type: 'success', title: 'Google CSE válido!', message: data.message })
+        if (Object.keys(toSave).length > 0) {
+          Object.keys(toSave).forEach(k => {
+            setSaved(s => ({ ...s, [k]: true }))
+            setTimeout(() => setSaved(s => ({ ...s, [k]: false })), 3000)
+          })
+          setValues(v => { const n = { ...v }; delete n['GOOGLE_CSE_KEY']; delete n['GOOGLE_CSE_CX']; return n })
+          await fetchConfig()
+        }
+      } else {
+        showModal({
+          type: 'error',
+          title: 'Falha no teste — Google CSE',
+          message: data.message,
+          details: [
+            'Verifique se a Google CSE Key começa com AIzaSy...',
+            'Confirme o ID do mecanismo em programmablesearchengine.google.com.',
+            'Ative a Custom Search API no Google Cloud Console.',
+          ],
+        })
+      }
+    } catch (err) {
+      showModal({
+        type: 'error',
+        title: 'Erro ao testar Google CSE',
+        message: err.message || 'Não foi possível realizar o teste.',
+      })
+    } finally {
+      setTesting(t => ({ ...t, GOOGLE_CSE_KEY: false }))
     }
   }
 
@@ -585,6 +631,27 @@ export function SettingsPage() {
                         </button>
                       </div>
                     )}
+
+                    {def.key === 'GOOGLE_CSE_CX' && (() => {
+                      const cseBothReady =
+                        (getConfigEntry('GOOGLE_CSE_KEY')?.configured || !!values['GOOGLE_CSE_KEY']) &&
+                        (getConfigEntry('GOOGLE_CSE_CX')?.configured  || !!values['GOOGLE_CSE_CX'])
+                      return (
+                        <div className="mt-3 flex justify-end">
+                          <button
+                            onClick={handleTestCSE}
+                            disabled={testing['GOOGLE_CSE_KEY'] || !cseBothReady}
+                            title={!cseBothReady ? 'Preencha e salve ambas as chaves para testar' : 'Testa KEY + CX juntos'}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium
+                                       bg-sky-900/50 hover:bg-sky-800/50 text-sky-300 border border-sky-700/50
+                                       transition-colors disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                          >
+                            {testing['GOOGLE_CSE_KEY'] ? <Loader2 size={13} className="animate-spin" /> : <FlaskConical size={13} />}
+                            Testar Google CSE
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}
