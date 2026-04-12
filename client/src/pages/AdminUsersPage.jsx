@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { UserPlus, Trash2, ShieldCheck, User, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
+import { UserPlus, Trash2, ShieldCheck, User, ToggleLeft, ToggleRight, Loader2, KeyRound } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { useAuth } from '../contexts/AuthContext.jsx'
 import { useModal } from '../hooks/useModal.js'
@@ -52,6 +52,42 @@ export function AdminUsersPage() {
     } catch (err) {
       showModal({ type: 'error', title: 'Erro', message: err.message })
     }
+  }
+
+  function handleResetPassword(user) {
+    let newPassword = ''
+    showModal({
+      type: 'warning',
+      title: `Redefinir senha — ${user.nome}`,
+      message: (
+        <div className="mt-2">
+          <label className="block text-xs text-zinc-400 mb-1">Nova senha (mínimo 6 caracteres)</label>
+          <input
+            type="password"
+            minLength={6}
+            autoFocus
+            className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white focus:border-blue-500 focus:outline-none"
+            onChange={e => { newPassword = e.target.value }}
+          />
+        </div>
+      ),
+      actions: [{
+        label: 'Salvar senha',
+        variant: 'primary',
+        onClick: async () => {
+          if (!newPassword || newPassword.length < 6) {
+            showModal({ type: 'error', title: 'Senha inválida', message: 'A senha deve ter pelo menos 6 caracteres.' })
+            return
+          }
+          try {
+            await api.updateUser(user.id, { password: newPassword })
+            showModal({ type: 'success', title: 'Senha alterada', message: `Senha de ${user.nome} atualizada.` })
+          } catch (err) {
+            showModal({ type: 'error', title: 'Erro', message: err.message })
+          }
+        },
+      }],
+    })
   }
 
   function handleDelete(user) {
@@ -176,6 +212,13 @@ export function AdminUsersPage() {
                   className="rounded p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300 disabled:opacity-30"
                 >
                   {user.ativo ? <ToggleRight size={16} className="text-green-400" /> : <ToggleLeft size={16} />}
+                </button>
+                <button
+                  onClick={() => handleResetPassword(user)}
+                  title="Redefinir senha"
+                  className="rounded p-1.5 text-zinc-500 transition hover:bg-zinc-800 hover:text-blue-400"
+                >
+                  <KeyRound size={14} />
                 </button>
                 <button
                   onClick={() => handleDelete(user)}

@@ -58,24 +58,66 @@ export async function listUsers(req, res, next) {
   }
 }
 
+const DEFAULT_STATUSES = [
+  { nome: 'Prospecção', cor: '#6b7280', ordem: 1 },
+  { nome: 'Contatado',  cor: '#3b82f6', ordem: 2 },
+  { nome: 'Proposta',   cor: '#f59e0b', ordem: 3 },
+  { nome: 'Fechado',    cor: '#22c55e', ordem: 4 },
+  { nome: 'Perdido',    cor: '#ef4444', ordem: 5 },
+]
+
+const SEED_UFS = ['SP','RJ','MG','RS','PR','SC','BA','GO','PE','CE']
+const SEED_NOMES = ['Loja Exemplo','Distribuidora Teste','Comércio Demo','Empresa Piloto','Negócio Modelo']
+
+async function seedUserDefaults(userId, client) {
+  // Cria os 5 statuses padrão e captura o id de Prospecção
+  let prospeccaoId = null
+  for (const s of DEFAULT_STATUSES) {
+    const { rows } = await client.query(
+      `INSERT INTO status (nome, cor, ordem, user_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [s.nome, s.cor, s.ordem, userId]
+    )
+    if (s.nome === 'Prospecção') prospeccaoId = rows[0].id
+  }
+
+  // Cria 1 cliente de teste para confirmar isolamento no banco
+  const uf   = SEED_UFS[userId % SEED_UFS.length]
+  const nome = `${SEED_NOMES[userId % SEED_NOMES.length]} (${uf})`
+  await client.query(
+    `INSERT INTO clients (nome, uf, status_id, user_id) VALUES ($1, $2, $3, $4)`,
+    [nome, uf, prospeccaoId, userId]
+  )
+}
+
 /** POST /auth/users — admin: cria novo usuário */
 export async function createUser(req, res, next) {
+  const client = await db.connect()
   try {
     const { nome, email, password, role = 'user' } = req.body
     if (!nome || !email || !password) throw new AppError('Nome, email e senha são obrigatórios.', 400)
     if (!['admin', 'user'].includes(role)) throw new AppError('Role inválido.', 400)
 
+    await client.query('BEGIN')
+
     const hash = await hashPassword(password)
-    const { rows } = await db.query(
+    const { rows } = await client.query(
       `INSERT INTO users (nome, email, password_hash, role)
        VALUES ($1, $2, $3, $4)
        RETURNING id, nome, email, role, ativo, created_at`,
       [nome.trim(), email.toLowerCase().trim(), hash, role]
     )
-    res.status(201).json(rows[0])
+    const newUser = rows[0]
+
+    await seedUserDefaults(newUser.id, client)
+
+    await client.query('COMMIT')
+    res.status(201).json(newUser)
   } catch (err) {
+    await client.query('ROLLBACK')
     if (err.code === '23505') return next(new AppError('Este email já está cadastrado.', 409))
     next(err)
+  } finally {
+    client.release()
   }
 }
 
