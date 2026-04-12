@@ -1,9 +1,10 @@
 import express from 'express'
-import cors from 'cors'
-import dotenv from 'dotenv'
+import cors    from 'cors'
+import dotenv  from 'dotenv'
+import cookieParser from 'cookie-parser'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { existsSync } from 'fs'
+import { existsSync }    from 'fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -17,9 +18,11 @@ import whatsappRoutes    from './routes/whatsapp.js'
 import emailRoutes       from './routes/email.js'
 import prospectingRoutes from './routes/prospecting.js'
 import settingsRoutes    from './routes/settings.js'
+import authRoutes        from './routes/auth.js'
 import { AppError }      from './utils/AppError.js'
 import db                from './db/db.js'
 import { loadConfigFromDb } from './config/configService.js'
+import { seedAdmin }        from './config/adminSeed.js'
 
 dotenv.config()
 
@@ -69,11 +72,13 @@ function agendarResetMeiaNoite() {
 const app = express()
 const PORT = process.env.PORT || 8000
 
-app.use(cors())
+app.use(cors({ origin: true, credentials: true }))
+app.use(cookieParser())
 app.use(express.json({ limit: '15mb' }))
 app.use(express.urlencoded({ extended: true, limit: '15mb' }))
 
 // ── Rotas ──────────────────────────────────────────
+app.use('/auth',         authRoutes)
 app.use('/status',       statusRoutes)
 app.use('/sellers',      sellerRoutes)
 app.use('/clients',      clientRoutes)
@@ -108,9 +113,8 @@ app.use((err, req, res, _next) => {
 
 app.listen(PORT, async () => {
   console.log(`🚀 Servidor rodando em http://localhost:${PORT}`)
-  // Carrega chaves de API salvas no banco (via página de configurações)
   await loadConfigFromDb()
-  // Reseta clientes contatados em dias anteriores caso o servidor estivesse offline à meia-noite
+  await seedAdmin()
   resetContatadoParaProspeccao({ apenasAnteriores: true })
   agendarResetMeiaNoite()
 })
