@@ -197,7 +197,7 @@ export const ProspectingController = {
         return true
       })
 
-      const { unique, duplicates } = await filterExisting(prospects)
+      const { unique, duplicates } = await filterExisting(prospects, req.user.id)
 
       const limitStatus = getSerperLimitStatus()
       res.json({
@@ -247,7 +247,7 @@ export const ProspectingController = {
       }
 
       // Re-run deduplication server-side (never trust client-side alone)
-      const { unique } = await filterExisting(prospects)
+      const { unique } = await filterExisting(prospects, req.user.id)
       if (unique.length === 0) {
         return res.json({ saved: 0, message: 'Todos os prospects já existem na base.' })
       }
