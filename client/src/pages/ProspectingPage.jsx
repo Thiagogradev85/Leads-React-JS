@@ -41,6 +41,11 @@ export function ProspectingPage() {
       setResultSource(data.source || 'serper')
       // Pre-select all unique prospects
       setSelected(new Set(data.unique.map((_, i) => i)))
+      // Avisa sobre limite Serper mesmo quando o fallback retornou resultados
+      if (data.serperLimit) {
+        setLimitInfo(data.serperLimit)
+        setShowLimitModal(true)
+      }
     } catch (err) {
       if (err.message === 'SERPER_LIMIT_REACHED') {
         setLimitInfo(err.payload?.serperLimit ?? null)

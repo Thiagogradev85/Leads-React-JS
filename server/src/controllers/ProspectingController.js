@@ -199,6 +199,7 @@ export const ProspectingController = {
 
       const { unique, duplicates } = await filterExisting(prospects)
 
+      const limitStatus = getSerperLimitStatus()
       res.json({
         total:       allPlaces.length,
         unique:      unique,
@@ -206,6 +207,15 @@ export const ProspectingController = {
         creditsUsed: totalCredits,
         query:       queries.join(' | '),
         source:      fallbackSource || 'serper',
+        // Inclui status do limite mesmo quando fallback funcionou,
+        // para o frontend mostrar o modal de aviso ao usuário
+        ...(limitStatus && {
+          serperLimit: {
+            ...limitStatus,
+            serpapiAvailable: !!process.env.SERPAPI_KEY,
+            bingAvailable:    !!process.env.BING_SEARCH_KEY,
+          },
+        }),
       })
     } catch (err) {
       if (err.message === 'SERPER_LIMIT_REACHED') {
