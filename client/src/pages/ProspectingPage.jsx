@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Telescope, Search, Loader2, Save, CheckSquare, Square, Info } from 'lucide-react'
+import { Telescope, Search, Loader2, Save, CheckSquare, Square, Info, Map } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { UFS } from '../utils/constants.js'
 import { ProspectCard } from '../components/ProspectCard.jsx'
@@ -18,12 +18,13 @@ export function ProspectingPage() {
   const [city, setCity]       = useState('')
 
   // Results
-  const [results, setResults]   = useState(null)   // null = no search yet
-  const [selected, setSelected] = useState(new Set())
-  const [loading, setLoading]   = useState(false)
-  const [saving, setSaving]     = useState(false)
+  const [results, setResults]       = useState(null)   // null = no search yet
+  const [selected, setSelected]     = useState(new Set())
+  const [loading, setLoading]       = useState(false)
+  const [saving, setSaving]         = useState(false)
   const [creditsUsed, setCreditsUsed] = useState(null)
-  const [enrichIds, setEnrichIds] = useState(null)  // null = modal fechado
+  const [resultSource, setResultSource] = useState(null) // 'serper' | 'openstreetmap' | ...
+  const [enrichIds, setEnrichIds]   = useState(null)  // null = modal fechado
 
   async function handleSearch(e) {
     e.preventDefault()
@@ -37,6 +38,7 @@ export function ProspectingPage() {
       const data = await api.searchProspects({ segment: segment.trim(), uf, city: city.trim() })
       setResults(data)
       setCreditsUsed(data.creditsUsed)
+      setResultSource(data.source || 'serper')
       // Pre-select all unique prospects
       setSelected(new Set(data.unique.map((_, i) => i)))
     } catch (err) {
@@ -229,6 +231,16 @@ export function ProspectingPage() {
       {/* Results */}
       {!loading && results && (
         <div className="space-y-4">
+          {/* Banner de fallback OpenStreetMap */}
+          {resultSource === 'openstreetmap' && (
+            <div className="flex items-start gap-2 rounded-xl bg-amber-900/20 border border-amber-700/40 px-4 py-3 text-xs text-amber-300">
+              <Map size={14} className="shrink-0 mt-0.5" />
+              <span>
+                Resultados via <strong>OpenStreetMap</strong> (Serper esgotado). Dados podem estar incompletos — telefones e sites podem não aparecer para todos.
+              </span>
+            </div>
+          )}
+
           {/* Summary bar */}
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-3 text-sm">

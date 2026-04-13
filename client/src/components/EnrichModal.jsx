@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Sparkles, Phone, Instagram, Mail, Facebook, X, Check, Loader2, AlertTriangle, MapPin, WifiOff } from 'lucide-react'
+import { Sparkles, Phone, Instagram, Mail, Facebook, X, Check, Loader2, AlertTriangle, MapPin, WifiOff, Info } from 'lucide-react'
 import { api } from '../utils/api.js'
-import { SerperLimitModal } from './SerperLimitModal.jsx'
 
 const FIELD_META = {
   cidade:    { label: 'Cidade',    icon: MapPin,      color: 'text-amber-400' },
@@ -125,15 +124,6 @@ export function EnrichModal({ clientIds, onSave, onClose }) {
   )
 
   return (
-    <>
-    {serperLimit && (
-      <SerperLimitModal
-        resetDate={serperLimit.resetDate}
-        serpapiAvailable={serperLimit.serpapiAvailable ?? false}
-        bingAvailable={serperLimit.bingAvailable ?? false}
-        onClose={() => setSerperLimit(null)}
-      />
-    )}
     <div className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-black/60">
       <div className="bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col relative">
 
@@ -156,6 +146,17 @@ export function EnrichModal({ clientIds, onSave, onClose }) {
             <X size={18} />
           </button>
         </div>
+
+        {/* Banner Serper esgotado — informativo, não-bloqueante */}
+        {serperLimit && (
+          <div className="flex items-start gap-2 mx-5 mt-3 rounded-lg bg-amber-900/20 border border-amber-700/40 px-3 py-2 text-xs text-amber-300">
+            <Info size={13} className="shrink-0 mt-0.5" />
+            <span>Enriquecimento via fallback (Serper esgotado). Resultados podem ser parciais.</span>
+            <button onClick={() => setSerperLimit(null)} className="ml-auto text-amber-600 hover:text-amber-400 shrink-0">
+              <X size={11} />
+            </button>
+          </div>
+        )}
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-5 py-4">
@@ -312,6 +313,5 @@ export function EnrichModal({ clientIds, onSave, onClose }) {
         </div>
       </div>
     </div>
-    </>
   )
 }

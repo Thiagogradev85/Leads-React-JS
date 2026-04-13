@@ -144,9 +144,10 @@ export const ProspectingController = {
       // Support multiple segments separated by commas — search each individually
       const segments = segment.split(',').map(s => s.trim()).filter(Boolean)
 
-      let allPlaces    = []
-      let totalCredits = 0
-      const queries    = []
+      let allPlaces     = []
+      let totalCredits  = 0
+      let fallbackSource = null
+      const queries     = []
 
       for (const seg of segments) {
         const parts = [seg]
@@ -155,9 +156,14 @@ export const ProspectingController = {
         const query = parts.join(' ')
         queries.push(query)
 
-        const { places, creditsUsed } = await searchPlaces(query)
+        const { places, creditsUsed, source } = await searchPlaces(query, {
+          segment: seg,
+          city:    city?.trim() || null,
+          uf:      uf?.trim()   || null,
+        })
         allPlaces    = allPlaces.concat(places)
         totalCredits += creditsUsed
+        if (source) fallbackSource = source
       }
 
       if (allPlaces.length === 0) {
@@ -199,6 +205,7 @@ export const ProspectingController = {
         duplicates:  duplicates,
         creditsUsed: totalCredits,
         query:       queries.join(' | '),
+        source:      fallbackSource || 'serper',
       })
     } catch (err) {
       if (err.message === 'SERPER_LIMIT_REACHED') {
