@@ -1,49 +1,46 @@
 /**
- * In-memory store for the current WhatsApp bulk send progress.
- * Only one job runs at a time (single WhatsApp connection).
+ * In-memory store for WhatsApp bulk send progress — per user.
+ * Each user can have one active job at a time.
  */
 
-let _job = null
+const _jobs = new Map() // userId → job
 
 export const progressStore = {
-  /** Start a new job */
-  start(total) {
-    _job = {
+  start(userId, total) {
+    _jobs.set(String(userId), {
       total,
-      current: 0,
-      sent: 0,
-      failed: 0,
-      status: 'sending', // 'sending' | 'done'
-      startedAt: Date.now(),
+      current:    0,
+      sent:       0,
+      failed:     0,
+      status:     'sending',
+      startedAt:  Date.now(),
       finishedAt: null,
-    }
+    })
   },
 
-  /** Update progress after each message */
-  update({ current, sent, failed }) {
-    if (!_job) return
-    _job.current = current
-    _job.sent    = sent
-    _job.failed  = failed
+  update(userId, { current, sent, failed }) {
+    const job = _jobs.get(String(userId))
+    if (!job) return
+    job.current = current
+    job.sent    = sent
+    job.failed  = failed
   },
 
-  /** Mark job as completed */
-  finish({ sent, failed }) {
-    if (!_job) return
-    _job.status     = 'done'
-    _job.sent       = sent
-    _job.failed     = failed
-    _job.current    = _job.total
-    _job.finishedAt = Date.now()
+  finish(userId, { sent, failed }) {
+    const job = _jobs.get(String(userId))
+    if (!job) return
+    job.status     = 'done'
+    job.sent       = sent
+    job.failed     = failed
+    job.current    = job.total
+    job.finishedAt = Date.now()
   },
 
-  /** Returns current job or null */
-  get() {
-    return _job
+  get(userId) {
+    return _jobs.get(String(userId)) ?? null
   },
 
-  /** Clear after frontend acknowledges completion */
-  clear() {
-    _job = null
+  clear(userId) {
+    _jobs.delete(String(userId))
   },
 }

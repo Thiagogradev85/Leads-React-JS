@@ -1,1 +1,1 @@
-export { whatsAppService } from './WhatsAppService.js'
+export { getWhatsAppService } from './WhatsAppService.js'

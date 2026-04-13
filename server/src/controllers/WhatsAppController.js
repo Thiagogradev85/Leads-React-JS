@@ -1,4 +1,4 @@
-import { whatsAppService } from '../modules/whatsapp/index.js'
+import { getWhatsAppService } from '../modules/whatsapp/index.js'
 import { progressStore }   from '../modules/whatsapp/progressStore.js'
 import { ClientModel } from '../models/ClientModel.js'
 import { AppError } from '../utils/AppError.js'
@@ -6,13 +6,13 @@ import { AppError } from '../utils/AppError.js'
 export const WhatsAppController = {
   // GET /whatsapp/status
   async status(req, res) {
-    res.json(whatsAppService.getStatus())
+    res.json(getWhatsAppService(req.user.id).getStatus())
   },
 
   // POST /whatsapp/connect
   async connect(req, res, next) {
     try {
-      whatsAppService.connect() // não aguarda — conexão é assíncrona (QR code)
+      getWhatsAppService(req.user.id).connect() // não aguarda — conexão é assíncrona (QR code)
       res.json({ message: 'Conectando... aguarde o QR Code.' })
     } catch (err) {
       next(err)
@@ -22,7 +22,7 @@ export const WhatsAppController = {
   // POST /whatsapp/disconnect
   async disconnect(req, res, next) {
     try {
-      await whatsAppService.disconnect()
+      await getWhatsAppService(req.user.id).disconnect()
       res.json({ message: 'Desconectado.' })
     } catch (err) {
       next(err)
@@ -32,7 +32,7 @@ export const WhatsAppController = {
   // POST /whatsapp/clear-session
   async clearSession(req, res, next) {
     try {
-      await whatsAppService.clearSession()
+      await getWhatsAppService(req.user.id).clearSession()
       res.json({ message: 'Sessão apagada com sucesso.' })
     } catch (err) {
       next(err)
@@ -41,12 +41,12 @@ export const WhatsAppController = {
 
   // GET /whatsapp/progress
   async progress(req, res) {
-    res.json(progressStore.get() ?? { status: 'idle' })
+    res.json(progressStore.get(req.user.id) ?? { status: 'idle' })
   },
 
   // POST /whatsapp/progress/clear
   async progressClear(req, res) {
-    progressStore.clear()
+    progressStore.clear(req.user.id)
     res.json({ ok: true })
   },
 
@@ -89,15 +89,15 @@ export const WhatsAppController = {
       if (clients.length === 0) throw new AppError('Nenhum cliente com WhatsApp encontrado para os filtros selecionados.', 400)
 
       const userId = req.user.id
-      progressStore.start(clients.length)
+      progressStore.start(userId, clients.length)
       res.json({ message: `Iniciando envio para ${clients.length} clientes...`, total: clients.length })
 
-      whatsAppService.sendBulk({
+      getWhatsAppService(userId).sendBulk({
         clients,
         message,
         delayMs: Math.max(3000, parseInt(delay_ms)),
         onProgress: ({ current, total, results }) => {
-          progressStore.update({ current, sent: results.sent, failed: results.failed })
+          progressStore.update(userId, { current, sent: results.sent, failed: results.failed })
         },
         onSent: async (client) => {
           try {
@@ -107,7 +107,7 @@ export const WhatsAppController = {
           }
         },
       }).then(results => {
-        progressStore.finish({ sent: results.sent, failed: results.failed })
+        progressStore.finish(userId, { sent: results.sent, failed: results.failed })
       })
     } catch (err) {
       next(err)
