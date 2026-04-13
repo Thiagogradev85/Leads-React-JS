@@ -45,7 +45,7 @@ async function searchPlacesFallback(query, { segment, city, uf } = {}) {
   if (serpResult) return serpResult
 
   // 2. OpenStreetMap via Overpass (gratuito, sem chave, sem limite)
-  if (city) {
+  if (city || uf) {
     const osmResult = await searchPlacesOverpass(segment || query, city, uf)
     if (osmResult) return osmResult
   }
@@ -62,7 +62,10 @@ export async function searchPlaces(query, opts = {}) {
   }
 
   const apiKey = process.env.SERPER_API_KEY
-  if (!apiKey) throw new AppError('SERPER_API_KEY não configurada no servidor.', 500)
+  if (!apiKey) {
+    console.warn('[Serper Maps] SERPER_API_KEY não configurada — usando fallback direto')
+    return searchPlacesFallback(query, opts)
+  }
 
   let response
   try {
@@ -100,7 +103,10 @@ export async function searchPlaces(query, opts = {}) {
 
 async function _searchWebSerper(query) {
   const apiKey = process.env.SERPER_API_KEY
-  if (!apiKey) throw new AppError('SERPER_API_KEY não configurada no servidor.', 500)
+  if (!apiKey) {
+    // Sem chave configurada → simula limite para acionar cadeia de fallbacks web
+    throw new AppError('SERPER_LIMIT_REACHED', 402)
+  }
 
   let response
   try {

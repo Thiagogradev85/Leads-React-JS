@@ -229,7 +229,7 @@ export function ProspectingPage() {
       {loading && (
         <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-500">
           <Loader2 size={32} className="animate-spin text-sky-500" />
-          <p className="text-sm">Consultando Google Maps via Serper...</p>
+          <p className="text-sm">Buscando prospects...</p>
         </div>
       )}
 

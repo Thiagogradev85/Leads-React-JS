@@ -3,8 +3,10 @@
  * Carrega configurações do banco (tabela settings) e aplica em process.env.
  * Isso permite configurar chaves de API via UI sem precisar do painel do Render.
  *
- * Prioridade: process.env (Render env vars) > banco de dados (UI settings)
- * Ou seja: se a chave já existir no process.env, o valor do banco NÃO sobrescreve.
+ * Prioridade: banco de dados (UI settings) > process.env (Render env vars)
+ * Ou seja: se uma chave foi salva pela UI, ela sobrescreve a env var do Render
+ * e persiste entre restarts — sem precisar mudar variáveis no painel do Render.
+ * Se não houver valor no banco, o valor de process.env é mantido como fallback.
  */
 
 import db from '../db/db.js'
@@ -34,13 +36,15 @@ export async function loadConfigFromDb() {
     )
     let loaded = 0
     for (const { key, value } of rows) {
-      if (!process.env[key] && value) {
+      // Banco sempre tem prioridade sobre env var do Render para chaves gerenciadas.
+      // Isso garante que salvar pela UI de Configurações persiste entre restarts.
+      if (value) {
         process.env[key] = value
         loaded++
       }
     }
     if (loaded > 0) {
-      console.log(`[ConfigService] ${loaded} chave(s) carregada(s) do banco.`)
+      console.log(`[ConfigService] ${loaded} chave(s) carregada(s) do banco (sobrescreve env vars).`)
     }
   } catch (err) {
     // Banco pode não ter a tabela ainda (primeira execução antes da migration)
@@ -73,13 +77,14 @@ export async function getAllConfig() {
   return MANAGED_KEYS.map(key => {
     const fromDb = map[key]
     const fromEnv = process.env[key]
+    // Banco tem prioridade: rawValue é o que está efetivamente em process.env agora
     const rawValue = fromDb?.value || fromEnv || ''
     return {
       key,
       configured: !!rawValue,
       // Mascara o valor: mostra os primeiros 4 chars + ***
       masked: rawValue ? rawValue.slice(0, 4) + '•••••••••••' : '',
-      source: fromEnv && fromDb?.value ? 'env+db' : fromEnv ? 'env' : fromDb?.value ? 'db' : 'none',
+      source: fromDb?.value ? 'db' : fromEnv ? 'env' : 'none',
       updated_at: fromDb?.updated_at ?? null,
     }
   })

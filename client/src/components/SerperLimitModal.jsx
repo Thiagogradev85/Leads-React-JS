@@ -1,4 +1,4 @@
-import { AlertTriangle, ExternalLink, RefreshCw, Zap, CheckCircle, XCircle } from 'lucide-react'
+import { AlertTriangle, ExternalLink, RefreshCw, Zap, CheckCircle, XCircle, Map } from 'lucide-react'
 
 const SERPER_URL   = 'https://serper.dev'
 const SERPAPI_URL  = 'https://serpapi.com'
@@ -10,16 +10,18 @@ const BING_URL     = 'https://portal.azure.com'
  * Props:
  *   onClose          — () => void
  *   resetDate        — string ISO (opcional)
- *   serpapiAvailable — boolean — SerpAPI configurada como fallback
- *   bingAvailable    — boolean — Bing Search configurado como fallback
+ *   serpapiAvailable — boolean — SerpAPI configurada (fallback web, não Maps)
+ *   bingAvailable    — boolean — Bing Search configurado (fallback web)
+ *   context          — 'maps' | 'web'
+ *
+ * Nota: OpenStreetMap (Overpass) é sempre o fallback Maps real — sem API key.
  */
 export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false, bingAvailable = false, context = 'web' }) {
   function handleOverlay(e) {
     if (e.target === e.currentTarget) onClose()
   }
 
-  // context='maps'  → Prospecção (Google Maps) — sem fallback disponível
-  // context='web'   → Enriquecimento (busca web) — SerpAPI/Bing funcionam como fallback
+  // context='maps' → Prospecção; context='web' → Enriquecimento
   const isMaps = context === 'maps'
 
   let resetLabel = null
@@ -31,8 +33,7 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
     } catch { /* ignora */ }
   }
 
-  // SerpAPI tem engine Google Maps — funciona como fallback para Maps também
-  const anyFallback = serpapiAvailable || (!isMaps && bingAvailable)
+  const anyFallback = isMaps /* OSM sempre disponível */ || serpapiAvailable || bingAvailable
 
   return (
     <div
@@ -58,29 +59,37 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
           </div>
         </div>
 
-        {/* Aviso Maps: SerpAPI tem engine Google Maps */}
-        {isMaps && serpapiAvailable && (
+        {/* Aviso Maps: OpenStreetMap sempre funciona como fallback real */}
+        {isMaps && (
           <div className="rounded-xl p-3 text-sm flex items-start gap-2 bg-emerald-900/20 border border-emerald-700/40">
             <CheckCircle size={14} className="text-emerald-400 shrink-0 mt-0.5" />
             <p className="text-emerald-300 text-xs">
-              SerpAPI está ativa como fallback para Maps. A busca continuará automaticamente com menor precisão.
-            </p>
-          </div>
-        )}
-        {isMaps && !serpapiAvailable && (
-          <div className="rounded-xl p-3 text-sm flex items-start gap-2 bg-zinc-800 border border-zinc-700">
-            <AlertTriangle size={14} className="text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-zinc-400 text-xs">
-              Configure <strong className="text-zinc-300">SERPAPI_KEY</strong> em Configurações para continuar prospectando gratuitamente via Google Maps.
+              <strong>OpenStreetMap</strong> está ativo como fallback. A busca continuará automaticamente — pesquisa pelo que você digitar em português, com dados mais limitados que o Google Maps.
             </p>
           </div>
         )}
 
-        {/* Status dos fallbacks — ordem: SerpAPI → Bing */}
+        {/* Status dos fallbacks — ordem: OSM → SerpAPI → Bing */}
         <div className="space-y-2">
           <p className="text-xs font-semibold text-zinc-500 uppercase tracking-wide">Status dos fallbacks</p>
 
-          {/* SerpAPI */}
+          {/* OpenStreetMap — sempre disponível para Prospecção */}
+          {isMaps && (
+            <div className="rounded-xl p-3 text-sm flex items-start gap-3 bg-emerald-900/30 border border-emerald-700/40">
+              <Map size={14} className="text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-medium text-xs text-emerald-300">
+                  OpenStreetMap — ativo (gratuito, sem limite)
+                </p>
+                <p className="text-zinc-500 text-xs mt-0.5">
+                  Busca por qualquer segmento em português com cidade ou UF.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* SerpAPI — fallback para Enriquecimento (busca web) */}
+          {!isMaps && (
           <div className={`rounded-xl p-3 text-sm flex items-start gap-3 ${
             serpapiAvailable
               ? 'bg-emerald-900/30 border border-emerald-700/40'
@@ -101,8 +110,10 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
               )}
             </div>
           </div>
+          )}
 
           {/* Bing */}
+          {!isMaps && (
           <div className={`rounded-xl p-3 text-sm flex items-start gap-3 ${
             bingAvailable
               ? 'bg-sky-900/30 border border-sky-700/40'
@@ -123,6 +134,7 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
               )}
             </div>
           </div>
+          )}{/* end !isMaps Bing */}
         </div>
 
         {/* O que fazer */}
@@ -130,20 +142,24 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
           <p className="font-medium text-zinc-200">O que você pode fazer:</p>
           <ul className="space-y-1.5 text-zinc-400">
             <li className="flex items-start gap-2">
+              <Map size={13} className="text-emerald-400 shrink-0 mt-0.5" />
+              Continuar prospectando via OpenStreetMap (automático)
+            </li>
+            <li className="flex items-start gap-2">
               <RefreshCw size={13} className="text-sky-400 shrink-0 mt-0.5" />
               Aguardar a renovação{resetLabel ? ` em ${resetLabel}` : ' mensal'}
             </li>
             <li className="flex items-start gap-2">
               <Zap size={13} className="text-amber-400 shrink-0 mt-0.5" />
-              Assinar plano pago no Serper para continuar agora
+              Assinar plano pago no Serper para continuar agora com Google Maps
             </li>
-            {!serpapiAvailable && (
+            {!isMaps && !serpapiAvailable && (
               <li className="flex items-start gap-2">
                 <ExternalLink size={13} className="text-emerald-400 shrink-0 mt-0.5" />
                 Configurar SerpAPI (gratuito, 100 buscas/mês — mais fácil)
               </li>
             )}
-            {!bingAvailable && (
+            {!isMaps && !bingAvailable && (
               <li className="flex items-start gap-2">
                 <ExternalLink size={13} className="text-zinc-400 shrink-0 mt-0.5" />
                 Configurar Bing Search (gratuito, 1.000 buscas/mês — via Azure)
@@ -163,7 +179,7 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
           >
             <ExternalLink size={15} /> Ver planos no Serper.dev
           </a>
-          {!serpapiAvailable && (
+          {!isMaps && !serpapiAvailable && (
             <a
               href={SERPAPI_URL}
               target="_blank"
@@ -174,7 +190,7 @@ export function SerperLimitModal({ onClose, resetDate, serpapiAvailable = false,
               <ExternalLink size={13} /> Criar conta grátis no SerpAPI
             </a>
           )}
-          {!bingAvailable && (
+          {!isMaps && !bingAvailable && (
             <a
               href={BING_URL}
               target="_blank"

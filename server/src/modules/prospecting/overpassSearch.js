@@ -1,16 +1,26 @@
 /**
  * Overpass API (OpenStreetMap) — fallback gratuito para Prospecção.
  *
- * Vantagens: 100% gratuito, sem chave de API, sem limite de uso.
- * Desvantagens: cobertura variável, sem ratings, telefones incompletos.
+ * Versão 2 — Multi-tag search:
+ *   Combina tag de categoria OSM (quando mapeada) + busca por palavras-chave
+ *   no nome, tipo e outras tags do estabelecimento. Funciona para qualquer
+ *   segmento digitado em português.
  *
- * Usado como último fallback da cadeia Maps:
+ * Vantagens: 100% gratuito, sem chave de API, sem limite de uso.
+ * Desvantagens: cobertura variável no interior, telefones/sites incompletos.
+ *
+ * Cadeia de fallback:
  *   Serper Maps → SerpAPI Maps → Overpass (este arquivo)
+ *
+ * Suporte geográfico:
+ *   - Com cidade: admin_level 8/9 (município)
+ *   - Só UF:      admin_level 4 (estado via ISO3166-2 BR-XX)
+ *   - Sem nenhum: retorna null (busca muito ampla)
  */
 
 const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
 
-// Termos PT-BR → filtros de tag OSM (prefixos para casamento parcial)
+// Mapeamento de termos PT-BR → tag OSM exata (complementa a busca por nome)
 const TERM_TAGS = [
   // Saúde
   ['farmac',       '["amenity"="pharmacy"]'],
@@ -30,6 +40,7 @@ const TERM_TAGS = [
   ['supermercad',  '["shop"="supermarket"]'],
   ['mercad',       '["shop"~"supermarket|convenience"]'],
   ['acougue',      '["shop"="butcher"]'],
+  ['açougue',      '["shop"="butcher"]'],
   ['cafe',         '["amenity"="cafe"]'],
   ['sorvet',       '["amenity"~"cafe|ice_cream"]'],
   // Auto
@@ -39,6 +50,12 @@ const TERM_TAGS = [
   ['mecanic',      '["shop"="car_repair"]'],
   ['lavagem',      '["amenity"="car_wash"]'],
   ['borrachei',    '["shop"="tyres"]'],
+  // Bicicletas / Scooters / Patinetes
+  ['biciclet',     '["shop"="bicycle"]'],
+  ['scooter',      '["shop"="bicycle"]'],
+  ['patinet',      '["shop"="bicycle"]'],
+  ['ciclist',      '["shop"="bicycle"]'],
+  ['veloci',       '["shop"="bicycle"]'],
   // Serviços pessoais
   ['academia',     '["leisure"="fitness_centre"]'],
   ['salao',        '["shop"~"hairdresser|beauty"]'],
@@ -62,49 +79,119 @@ const TERM_TAGS = [
   ['universid',    '["amenity"="university"]'],
   // Livraria
   ['livrar',       '["shop"="books"]'],
-  // Açougue (com acento)
-  ['açougue',      '["shop"="butcher"]'],
 ]
+
+// Palavras sem valor semântico para a busca OSM
+const STOPWORDS = new Set([
+  'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'no', 'na', 'nos', 'nas',
+  'para', 'por', 'com', 'uma', 'uns', 'umas', 'loja', 'lojas', 'empresa',
+  'servico', 'serviço', 'servicos', 'serviços', 'comercio', 'comércio',
+])
 
 function normalize(str) {
   return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 /**
- * Mapeia um termo de busca PT-BR para um filtro de tag OSM.
- * Se não encontrar, usa busca por nome (~"termo","i").
+ * Extrai palavras-chave significativas do segmento digitado pelo usuário.
+ * Remove stopwords e palavras curtas.
+ * Ex: "loja de bicicletas elétricas" → ["biciclet", "eletr"]  (prefixos de 6 chars)
+ * Ex: "farmácia"                      → ["farmac"]
  */
-function getOsmFilter(segment) {
+function extractKeywords(segment) {
+  return segment
+    .split(/\s+/)
+    .map(w => normalize(w.replace(/["\\]/g, '')))
+    .filter(w => w.length >= 4 && !STOPWORDS.has(w))
+    // Encurta para prefixo de 6 chars (melhor matching parcial no OSM)
+    .map(w => (w.length > 6 ? w.slice(0, 6) : w))
+    // Remove duplicatas
+    .filter((w, i, arr) => arr.indexOf(w) === i)
+}
+
+/**
+ * Constrói lista de filtros Overpass para o segmento.
+ * Sempre inclui:
+ *   1. Tag exata de categoria (se o segmento está mapeado em TERM_TAGS)
+ *   2. Busca por palavras-chave no nome do estabelecimento
+ *   3. Busca por palavras-chave no tipo (shop/amenity/craft/office/leisure)
+ */
+function buildOsmFilters(segment) {
   const norm = normalize(segment)
+  const filters = []
+
+  // 1. Tag de categoria exata (quando segmento é reconhecido)
   for (const [term, filter] of TERM_TAGS) {
-    if (norm.includes(normalize(term))) return filter
+    if (norm.includes(normalize(term))) {
+      filters.push(filter)
+      break
+    }
   }
-  // Fallback: busca no atributo "name" do OSM
-  const escaped = segment.replace(/["\\]/g, '').trim()
-  return `["name"~"${escaped}","i"]`
+
+  // 2. Keywords extraídas → busca em múltiplas tags textuais
+  const keywords = extractKeywords(segment)
+  if (keywords.length > 0) {
+    const pattern = keywords.join('|')
+    // Nome do estabelecimento (mais importante)
+    filters.push(`["name"~"${pattern}","i"]`)
+    // Tipo de loja/serviço (shop, amenity, craft, office, leisure)
+    filters.push(`["shop"~"${pattern}","i"]`)
+    filters.push(`["amenity"~"${pattern}","i"]`)
+    filters.push(`["craft"~"${pattern}","i"]`)
+    filters.push(`["office"~"${pattern}","i"]`)
+  } else {
+    // Segmento muito curto ou todo stopwords — busca pelo texto completo no nome
+    const escaped = segment.replace(/["\\]/g, '').trim()
+    if (escaped) filters.push(`["name"~"${escaped}","i"]`)
+  }
+
+  return filters
+}
+
+/**
+ * Constrói a cláusula de área OSM.
+ *   Com cidade: admin_level 8 ou 9 (município/distrito)
+ *   Só UF:      admin_level 4 via código ISO 3166-2 (BR-PR, BR-SP, etc.)
+ *   Sem nenhum: retorna null (sem área = busca recusada)
+ */
+function buildAreaQL(city, uf) {
+  if (city?.trim()) {
+    const c = city.trim().replace(/["\\]/g, '')
+    return `area["name"~"^${c}$","i"]["admin_level"~"^[89]$"]->.a;`
+  }
+  if (uf?.trim()) {
+    // ISO 3166-2 é a forma mais confiável de encontrar o estado no OSM
+    return `area["ISO3166-2"="BR-${uf.trim().toUpperCase()}"]->.a;`
+  }
+  return null
 }
 
 /**
  * Busca estabelecimentos no OpenStreetMap via Overpass API.
  * Retorna no mesmo shape que searchPlaces() do serper.js.
  *
- * Retorna null se: sem cidade, timeout, erro de rede ou sem resultados.
+ * Funciona com qualquer segmento em português.
+ * Requer pelo menos cidade ou UF para delimitar a área de busca.
  */
 export async function searchPlacesOverpass(segment, city, uf) {
-  if (!city) {
-    console.log('[Overpass] sem cidade — busca muito ampla, ignorando')
+  const areaQL = buildAreaQL(city, uf)
+  if (!areaQL) {
+    console.log('[Overpass] sem cidade nem UF — busca muito ampla, ignorando')
     return null
   }
 
-  const osmFilter = getOsmFilter(segment)
+  const filters = buildOsmFilters(segment)
+  if (filters.length === 0) {
+    console.log('[Overpass] nenhum filtro construído para o segmento')
+    return null
+  }
 
-  // admin_level 8 = municípios no Brasil; 9 = distritos/subprefeituras
-  const areaQL = `area["name"~"^${city.trim()}$","i"]["admin_level"~"^[89]$"]->.a;`
-
-  const query = `[out:json][timeout:20];
+  // Monta query com union de todos os filtros (nwr = node|way|relation)
+  const filterLines = filters.map(f => `  nwr${f}(area.a);`).join('\n')
+  const query = `[out:json][timeout:30];
 ${areaQL}
 (
-  nwr${osmFilter}(area.a);
+${filterLines}
 );
 out center 20;`
 
@@ -114,7 +201,7 @@ out center 20;`
       method:  'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body:    `data=${encodeURIComponent(query)}`,
-      signal:  AbortSignal.timeout(25000),
+      signal:  AbortSignal.timeout(35000),
     })
   } catch (err) {
     console.warn(`[Overpass] erro de rede: ${err.message}`)
@@ -129,43 +216,53 @@ out center 20;`
   let data
   try { data = await response.json() } catch { return null }
 
-  const elements = (data.elements || []).filter(el => el.tags?.name)
-  if (elements.length === 0) {
-    console.log(`[Overpass] 0 resultados para "${segment}" em "${city}"`)
+  // Deduplica por ID do elemento OSM (um mesmo lugar pode aparecer em vários filtros)
+  const seen = new Set()
+  const unique = (data.elements || []).filter(el => {
+    if (!el.tags?.name) return false
+    if (seen.has(el.id)) return false
+    seen.add(el.id)
+    return true
+  })
+
+  if (unique.length === 0) {
+    const area = city?.trim() || uf?.trim() || '?'
+    console.log(`[Overpass] 0 resultados para "${segment}" em "${area}"`)
     return null
   }
 
-  const places = elements.slice(0, 20).map(el => {
+  const places = unique.slice(0, 20).map(el => {
     const tags = el.tags || {}
 
     const addrParts = [
       tags['addr:street'],
       tags['addr:housenumber'],
       tags['addr:suburb'],
-      tags['addr:city'] || city,
-      tags['addr:state'] || uf,
+      tags['addr:city'] || city || null,
+      tags['addr:state'] || uf  || null,
     ].filter(Boolean)
 
-    // Normaliza telefone: remove código de país BR
-    const rawPhone = (tags.phone || tags['contact:phone'] || tags['phone:br'] || '').trim()
+    // Normaliza telefone: remove código de país BR e espaços
+    const rawPhone = (tags.phone || tags['contact:phone'] || tags['contact:mobile'] || '').trim()
     const phone = rawPhone
-      ? rawPhone.replace(/^\+?55[-\s]?/, '').replace(/\s/g, '').trim() || null
+      ? rawPhone.replace(/^\+?55[-\s]?/, '').replace(/[-\s()]/g, '').trim() || null
       : null
 
-    const website = tags.website || tags['contact:website'] || tags.url || null
-    const type    = tags.amenity || tags.shop || tags.leisure || tags.office || null
+    const website = tags.website || tags['contact:website'] || tags['contact:facebook'] || tags.url || null
+    const type    = tags.amenity || tags.shop || tags.craft || tags.leisure || tags.office || null
 
     return {
       title:       tags.name,
       address:     addrParts.join(', ') || null,
-      phone:       phone || null,
+      phone:       phone   || null,
       website:     website || null,
       rating:      null,
       ratingCount: null,
-      type:        type   || null,
+      type:        type    || null,
     }
   })
 
-  console.log(`[Overpass] ${places.length} resultados para "${segment}" em "${city}"`)
+  const area = city?.trim() || uf?.trim() || '?'
+  console.log(`[Overpass] ${places.length} resultados para "${segment}" em "${area}" (${filters.length} filtros)`)
   return { places, creditsUsed: 0, source: 'openstreetmap' }
 }
