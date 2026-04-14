@@ -11,12 +11,16 @@ router.get('/export',                         ClientController.exportClients)
 router.get('/overdue',                        ClientController.getOverdue)
 router.get('/duplicates',                     ClientController.findDuplicates)
 router.get('/ufs',                            ClientController.listUFs)
+router.get('/pending-uf',                     ClientController.listPendingUF)
 
 router.get('/',                               ClientController.list)
 router.get('/:id',                            ClientController.get)
 router.post('/',                              ClientController.create)
 router.put('/:id',                            ClientController.update)
 router.delete('/:id',                         ClientController.delete)
+
+// Atribui UF a cliente importado sem estado
+router.patch('/:id/assign-uf',                ClientController.assignUF)
 
 // Compra — registra evento no relatório diário
 router.post('/:id/purchase',                  ClientController.registerPurchase)

@@ -11,6 +11,10 @@ const FILTERS_KEY               = 'clients_filters'
 const VIEW_KEY                  = 'clients_viewMode'
 const ATTENTION_IGNORED_UFS_KEY = 'attention_ignored_ufs'
 const ATTENTION_DAYS_KEY        = 'attention_days'
+const UF_PICKER_UFS = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+]
 
 function savedFilters() {
   try { return JSON.parse(sessionStorage.getItem(FILTERS_KEY)) } catch { return null }
@@ -313,6 +317,10 @@ export function ClientsPage() {
   const [newClientsOpen, setNewClientsOpen] = useState(
     () => sessionStorage.getItem('section_newclients') === 'true'
   )
+  // Fila laranja: clientes importados sem UF
+  const [pendingUFClients, setPendingUFClients] = useState([])
+  const [pendingUFOpen, setPendingUFOpen] = useState(false)
+  const [pendingUFPicker, setPendingUFPicker] = useState(null) // id do cliente com picker aberto
   // Mapa de estado aberto/fechado por UF — sobrevive a re-renders e loads
   const [openUFs, setOpenUFs] = useState(new Map())
 
@@ -418,6 +426,15 @@ export function ClientsPage() {
   useEffect(() => {
     api.listStatuses().then(setStatuses)
   }, [])
+
+  const loadPendingUF = useCallback(() => {
+    api.listPendingUF().then(data => {
+      setPendingUFClients(data)
+      if (data.length > 0) setPendingUFOpen(true)
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => { loadPendingUF() }, [loadPendingUF])
 
   // Ouve atualizações de outras abas (cliente salvo na tela de detalhe)
   useEffect(() => {
@@ -605,11 +622,23 @@ export function ClientsPage() {
         details: details.length > 0 ? details : undefined,
       })
       load()
+      loadPendingUF()
     } catch (err) {
       showModal({ type: 'error', title: 'Erro na importação', message: err.message })
     } finally {
       setImporting(false)
       e.target.value = ''
+    }
+  }
+
+  async function handleAssignUF(clientId, uf) {
+    try {
+      await api.assignUF(clientId, uf)
+      setPendingUFPicker(null)
+      loadPendingUF()
+      load()
+    } catch (err) {
+      showModal({ type: 'error', title: 'Erro', message: err.message })
     }
   }
 
@@ -734,6 +763,98 @@ export function ClientsPage() {
     })
   }, [nameSort, contactSort])
 
+  // ── Seção laranja: clientes importados sem UF ──────────────────────────────
+  function renderPendingUFSection() {
+    if (pendingUFClients.length === 0) return null
+    return (
+      <div className="table-wrapper">
+        <button
+          className="w-full flex items-center gap-2 px-4 py-2 bg-orange-950 border-b border-orange-800 hover:bg-orange-900/60 transition-colors text-left"
+          onClick={() => setPendingUFOpen(v => !v)}
+        >
+          <AlertTriangle size={14} className="text-orange-400" />
+          <span className="font-semibold text-orange-300 text-sm">UF Pendente</span>
+          <span className="text-orange-700 text-xs">
+            {pendingUFClients.length} cliente{pendingUFClients.length !== 1 ? 's' : ''} importado{pendingUFClients.length !== 1 ? 's' : ''} sem estado — atribuição obrigatória
+          </span>
+          {pendingUFOpen
+            ? <ChevronUp size={14} className="ml-auto text-orange-600" />
+            : <ChevronDown size={14} className="ml-auto text-orange-600" />
+          }
+        </button>
+        {pendingUFOpen && (
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th className="hidden sm:table-cell">Cidade</th>
+                <th className="hidden md:table-cell">WhatsApp</th>
+                <th>Atribuir UF</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingUFClients.map(c => (
+                <tr key={c.id}>
+                  <td className="max-w-[200px] break-words">
+                    <a
+                      href={`/clients/${c.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 hover:text-sky-300 font-medium"
+                    >
+                      {c.nome}
+                    </a>
+                    <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                      <AlertTriangle size={10} /> Sem UF
+                    </span>
+                  </td>
+                  <td className="hidden sm:table-cell text-zinc-400">{c.cidade || '—'}</td>
+                  <td className="hidden md:table-cell text-zinc-400">
+                    {whatsappLink(c.whatsapp)
+                      ? <a href={whatsappLink(c.whatsapp)} target="_blank" rel="noreferrer"
+                          className="text-green-400 hover:text-green-300 flex items-center gap-1">
+                          <Phone size={12} /> {c.whatsapp}
+                        </a>
+                      : <span className="text-zinc-600">—</span>
+                    }
+                  </td>
+                  <td>
+                    {pendingUFPicker === c.id ? (
+                      <div className="flex flex-wrap gap-1 max-w-xs">
+                        {UF_PICKER_UFS.map(uf => (
+                          <button
+                            key={uf}
+                            className="px-1.5 py-0.5 text-xs rounded bg-orange-800 hover:bg-orange-600 text-orange-200 font-mono transition-colors"
+                            onClick={() => handleAssignUF(c.id, uf)}
+                          >
+                            {uf}
+                          </button>
+                        ))}
+                        <button
+                          className="px-1.5 py-0.5 text-xs rounded bg-zinc-700 hover:bg-zinc-600 text-zinc-400 transition-colors"
+                          onClick={() => setPendingUFPicker(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn-sm px-3 py-1 text-xs rounded bg-orange-700 hover:bg-orange-600 text-orange-100 font-semibold transition-colors"
+                        onClick={() => setPendingUFPicker(c.id)}
+                      >
+                        Selecionar UF
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    )
+  }
+
   // ── Seção Atenção reutilizável (estado e lista) ─────────────────────────────
   // overdueOverride: quando fornecido, usa esses dados em vez de calcular do clients[]
   function renderAttentionSection(isOpen, setIsOpen, overdueOverride) {
@@ -844,6 +965,7 @@ export function ClientsPage() {
 
     return (
       <div className="space-y-6">
+          {renderPendingUFSection()}
           {renderAttentionSection(attentionOpen, setAttentionOpen, overdueSection)}
 
           {newSection.length > 0 && (
@@ -907,6 +1029,7 @@ export function ClientsPage() {
 
     return (
       <>
+        {renderPendingUFSection()}
         {renderAttentionSection(listAttentionOpen, setListAttentionOpen, overdueSection)}
 
         {clients.length > 0 && (

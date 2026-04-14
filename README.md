@@ -1,13 +1,14 @@
 # ⚡ Leads CRM
 
-**v2.0.0** — CRM multi-tenant para gestão de leads, prospecção, catálogos e envio em massa via WhatsApp e E-mail.
+**v2.1.0** — CRM multi-tenant para gestão de leads, prospecção, catálogos e envio em massa via WhatsApp e E-mail.
 
 ## Funcionalidades
 
 - **Gestão de Clientes** — cadastro, filtros, notas, UFs, catálogo enviado, vendedor responsável
-- **Importação / Exportação** — Excel (bulk upsert) e PDF
+- **Importação / Exportação** — Excel (bulk upsert) e PDF; detecção automática de UF em endereços
+- **Fila Laranja — UF Pendente** — clientes importados sem UF ficam em fila de tratamento obrigatório
 - **Catálogos & Produtos** — catálogos com produtos vinculados, exportação PDF, importação via PDF com IA
-- **Vendedores** — por UF, atribuição automática
+- **Vendedores** — atribuição por UF com exclusividade (1 vendedor por UF); auto-assign diário silencioso
 - **WhatsApp em Massa** — envio filtrado com delay configurável
 - **E-mail em Massa** — templates com variáveis, anexo de catálogo em PDF
 - **Prospecção** — busca no Google Maps via Serper/SerpApi/Brave/Bing/Google CSE
@@ -26,6 +27,22 @@
 | IA         | Claude (Anthropic) — enriquecimento + importação|
 | Busca      | Serper → SerpApi → Brave → Bing → Google CSE   |
 | Deploy     | Render (backend + frontend servido pelo Express)|
+
+## Regras de Negócio Principais
+
+### UF e Vendedores
+- **UF obrigatória** para todo cliente — determina qual vendedor o atende
+- **Importação sem UF** é permitida: clientes vão para a **fila laranja** de tratamento obrigatório na tela de Clientes
+- **Detecção automática de UF** em endereços no Excel: suporta `Cidade/UF`, `Cidade - UF`, `(UF)`, nome completo do estado
+- **Exclusividade de UF**: cada UF só pode ter 1 vendedor responsável por usuário; UI bloqueia seleção de UFs já ocupadas
+- **Auto-assign diário**: toda meia-noite (ou no startup, se o servidor estava offline) o sistema associa vendedores a clientes que têm UF mas estão sem vendedor
+
+### Resets diários (meia-noite de Brasília ou no startup)
+| Tarefa | Comportamento |
+|--------|--------------|
+| Contatado → Prospecção | Clientes contatados voltam para prospecção no dia seguinte |
+| Reset "Não Tem Interesse" | Após 3 meses, status é revertido para Prospecção automaticamente |
+| Auto-assign de vendedores | Clientes com UF mas sem vendedor recebem vendedor baseado na UF |
 
 ## Arquitetura de Auth
 
@@ -76,7 +93,10 @@ Execute em ordem no Neon SQL Editor:
 009_cleanup_instagram_false_positives.sql
 010_settings_table.sql
 011_multi_tenant.sql          ← cria tabela users + user_id nas tabelas principais
-012_seed_missing_user_statuses.sql  ← corrige constraint status + seed para usuários existentes
+012_seed_missing_user_statuses.sql
+013_nao_tem_interesse.sql
+014_whatsapp_sessions.sql
+015_uf_nullable.sql           ← torna uf opcional (clientes importados sem estado)
 ```
 
 ## Desenvolvimento local

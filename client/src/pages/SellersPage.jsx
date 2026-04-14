@@ -1,17 +1,19 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Plus, Edit2, Trash2, UserCheck } from 'lucide-react'
 import { api } from '../utils/api.js'
 import { UFS, whatsappLink } from '../utils/constants.js'
 import { EmptyState } from '../components/EmptyState.jsx'
 import { useModal } from '../hooks/useModal.js'
 
-function SellerForm({ initial = {}, onSave, onCancel }) {
+// takenUFs: Set de UFs já ocupadas por OUTROS vendedores
+function SellerForm({ initial = {}, takenUFs = new Set(), onSave, onCancel }) {
   const [nome,     setNome]     = useState(initial.nome || '')
   const [whatsapp, setWhatsapp] = useState(initial.whatsapp || '')
   const [ufs,      setUfs]      = useState(initial.ufs || [])
   const [loading,  setLoading]  = useState(false)
 
   function toggleUF(uf) {
+    if (takenUFs.has(uf)) return
     setUfs(prev =>
       prev.includes(uf) ? prev.filter(u => u !== uf) : [...prev, uf]
     )
@@ -37,21 +39,34 @@ function SellerForm({ initial = {}, onSave, onCancel }) {
       </div>
       <div>
         <label className="label">Estados que atende</label>
+        {takenUFs.size > 0 && (
+          <p className="text-xs text-zinc-500 mt-1 mb-1">
+            UFs em cinza já estão atribuídas a outro vendedor e não podem ser selecionadas.
+          </p>
+        )}
         <div className="flex flex-wrap gap-1.5 mt-1">
-          {UFS.map(uf => (
-            <button
-              key={uf}
-              type="button"
-              onClick={() => toggleUF(uf)}
-              className={`px-2 py-1 rounded text-xs font-bold transition-colors ${
-                ufs.includes(uf)
-                  ? 'bg-sky-600 text-white'
-                  : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
-              }`}
-            >
-              {uf}
-            </button>
-          ))}
+          {UFS.map(uf => {
+            const isTaken    = takenUFs.has(uf)
+            const isSelected = ufs.includes(uf)
+            return (
+              <button
+                key={uf}
+                type="button"
+                onClick={() => toggleUF(uf)}
+                disabled={isTaken}
+                title={isTaken ? 'Já atribuída a outro vendedor' : undefined}
+                className={`px-2 py-1 rounded text-xs font-bold transition-colors ${
+                  isTaken
+                    ? 'bg-zinc-800 text-zinc-600 cursor-not-allowed opacity-50'
+                    : isSelected
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-zinc-700 text-zinc-400 hover:bg-zinc-600'
+                }`}
+              >
+                {uf}
+              </button>
+            )
+          })}
         </div>
       </div>
       <div className="flex gap-2">
@@ -79,6 +94,24 @@ export function SellersPage() {
 
   useEffect(() => { load() }, [])
 
+  // UFs de todos os vendedores: { uf → nome_vendedor }
+  const allTakenMap = useMemo(() => {
+    const map = new Map()
+    sellers.forEach(s => (s.ufs || []).forEach(uf => map.set(uf, s.nome)))
+    return map
+  }, [sellers])
+
+  // Para o form de criação: todas as UFs já ocupadas
+  const takenForCreate = useMemo(() => new Set(allTakenMap.keys()), [allTakenMap])
+
+  // Para o form de edição de seller X: UFs ocupadas por outros (não pelo próprio X)
+  function takenForEdit(seller) {
+    const ownUFs = new Set(seller.ufs || [])
+    const taken = new Set()
+    allTakenMap.forEach((_, uf) => { if (!ownUFs.has(uf)) taken.add(uf) })
+    return taken
+  }
+
   async function handleCreate(data) {
     try {
       await api.createSeller(data)
@@ -97,13 +130,25 @@ export function SellersPage() {
     } catch (err) { showModal({ type: 'error', title: 'Erro', message: err.message }) }
   }
 
-  async function handleDelete(seller) {
-    if (!confirm(`Excluir vendedor "${seller.nome}"?`)) return
-    try {
-      await api.deleteSeller(seller.id)
-      showModal({ type: 'success', title: 'Sucesso', message: 'Vendedor excluído.' })
-      load()
-    } catch (err) { showModal({ type: 'error', title: 'Erro', message: err.message }) }
+  function handleDelete(seller) {
+    showModal({
+      type: 'warning',
+      title: `Excluir vendedor "${seller.nome}"?`,
+      message: 'Esta ação é permanente e não pode ser desfeita.',
+      actions: [
+        {
+          label: 'Sim, excluir',
+          variant: 'danger',
+          onClick: async () => {
+            try {
+              await api.deleteSeller(seller.id)
+              showModal({ type: 'success', title: 'Sucesso', message: 'Vendedor excluído.' })
+              load()
+            } catch (err) { showModal({ type: 'error', title: 'Erro', message: err.message }) }
+          },
+        },
+      ],
+    })
   }
 
   return (
@@ -120,7 +165,11 @@ export function SellersPage() {
       {showForm && (
         <div className="card">
           <h2 className="font-semibold text-zinc-200 mb-4">Novo Vendedor</h2>
-          <SellerForm onSave={handleCreate} onCancel={() => setShowForm(false)} />
+          <SellerForm
+            takenUFs={takenForCreate}
+            onSave={handleCreate}
+            onCancel={() => setShowForm(false)}
+          />
         </div>
       )}
 
@@ -135,6 +184,7 @@ export function SellersPage() {
               {editing?.id === sel.id ? (
                 <SellerForm
                   initial={sel}
+                  takenUFs={takenForEdit(sel)}
                   onSave={(d) => handleUpdate(sel.id, d)}
                   onCancel={() => setEditing(null)}
                 />

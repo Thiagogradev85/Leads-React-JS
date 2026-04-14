@@ -206,6 +206,25 @@ export const ClientController = {
     }
   },
 
+  // Clientes importados sem UF
+  async listPendingUF(req, res, next) {
+    try {
+      const data = await ClientModel.listPendingUF(req.user.id)
+      res.json(data)
+    } catch (err) { next(err) }
+  },
+
+  // Atribui UF a um cliente que foi importado sem estado
+  async assignUF(req, res, next) {
+    try {
+      const { uf } = req.body
+      if (!uf?.trim()) throw new AppError('UF é obrigatória.', 422)
+      const data = await ClientModel.assignUF(req.params.id, uf, req.user.id)
+      if (!data) throw new AppError('Cliente não encontrado ou UF já atribuída.', 404)
+      res.json(data)
+    } catch (err) { next(err) }
+  },
+
   // Clientes sem contato há mais de N dias (padrão: 3)
   // Exclui clientes criados hoje ("Novos")
   async getOverdue(req, res, next) {

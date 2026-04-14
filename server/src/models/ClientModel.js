@@ -496,14 +496,15 @@ export const ClientModel = {
 
     for (const rec of records) {
       try {
-        if (!rec.nome || !rec.uf) {
+        if (!rec.nome) {
           results.skipped++
           continue
         }
+        const recUF = rec.uf ? rec.uf.toUpperCase() : null
         // Tenta atualizar por whatsapp ou nome+uf (restrito ao usuário)
         const { rows: existing } = await db.query(
-          `SELECT id FROM clients WHERE user_id = $4 AND ((whatsapp = $1 AND $1 IS NOT NULL) OR (LOWER(nome) = LOWER($2) AND uf = $3)) LIMIT 1`,
-          [rec.whatsapp || null, rec.nome, rec.uf.toUpperCase(), userId]
+          `SELECT id FROM clients WHERE user_id = $4 AND ((whatsapp = $1 AND $1 IS NOT NULL) OR (LOWER(nome) = LOWER($2) AND ($3 IS NULL OR uf = $3))) LIMIT 1`,
+          [rec.whatsapp || null, rec.nome, recUF, userId]
         )
         if (existing.length > 0) {
           // Só preenche campos que estão vazios no banco — nunca sobrescreve dados existentes
@@ -522,13 +523,13 @@ export const ClientModel = {
           results.updated++
         } else {
           // Atribui vendedor automaticamente pelo UF (restrito ao usuário)
-          const { rows: sellerRows } = await db.query(
+          const { rows: sellerRows } = recUF ? await db.query(
             `SELECT su.seller_id FROM seller_ufs su
              JOIN sellers s ON s.id = su.seller_id
              WHERE su.uf = $1 AND s.user_id = $2
              LIMIT 1`,
-            [rec.uf.toUpperCase(), userId]
-          )
+            [recUF, userId]
+          ) : { rows: [] }
           const seller_id = sellerRows[0]?.seller_id || null
 
           // Sem WhatsApp e sem Instagram → nota 1 automaticamente
@@ -537,7 +538,7 @@ export const ClientModel = {
           const { rows: inserted } = await db.query(
             `INSERT INTO clients (nome, cidade, uf, whatsapp, site, instagram, nota, seller_id, status_id, ja_cliente, user_id)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-            [rec.nome, rec.cidade, rec.uf.toUpperCase(), rec.whatsapp, rec.site, rec.instagram, nota, seller_id, prospeccaoId, false, userId]
+            [rec.nome, rec.cidade, recUF, rec.whatsapp, rec.site, rec.instagram, nota, seller_id, prospeccaoId, false, userId]
           )
           await db.query(
             `INSERT INTO daily_report_events (client_id, event_type, event_date)
@@ -552,5 +553,59 @@ export const ClientModel = {
       }
     }
     return results
+  },
+
+  // Clientes importados sem UF — aguardando atribuição manual
+  async listPendingUF(userId) {
+    const { rows } = await db.query(
+      `SELECT c.id, c.nome, c.cidade, c.whatsapp, c.instagram, c.site, c.created_at
+       FROM clients c
+       WHERE c.uf IS NULL AND c.ativo = true AND c.user_id = $1
+       ORDER BY c.created_at DESC`,
+      [userId]
+    )
+    return rows
+  },
+
+  // Atribui UF a um cliente sem UF e já tenta associar vendedor
+  async assignUF(id, uf, userId) {
+    const upperUF = uf.toUpperCase()
+    // Busca vendedor responsável por essa UF
+    const { rows: sellerRows } = await db.query(
+      `SELECT su.seller_id FROM seller_ufs su
+       JOIN sellers s ON s.id = su.seller_id
+       WHERE su.uf = $1 AND s.user_id = $2 AND s.ativo = true
+       LIMIT 1`,
+      [upperUF, userId]
+    )
+    const seller_id = sellerRows[0]?.seller_id || null
+    const { rows } = await db.query(
+      `UPDATE clients SET uf = $1, seller_id = COALESCE(seller_id, $2), updated_at = NOW()
+       WHERE id = $3 AND user_id = $4 AND uf IS NULL
+       RETURNING id, nome, cidade, uf, seller_id`,
+      [upperUF, seller_id, id, userId]
+    )
+    return rows[0] || null
+  },
+
+  // Tarefa diária: associa vendedores a clientes que têm UF mas seller_id nulo
+  async bulkAssignSellers(userId = null) {
+    // Se userId for null, roda para todos os usuários
+    const params = userId ? [userId] : []
+    const userFilter = userId ? 'AND c.user_id = $1' : ''
+    const { rowCount } = await db.query(
+      `UPDATE clients c
+       SET seller_id = su.seller_id, updated_at = NOW()
+       FROM seller_ufs su
+       JOIN sellers s ON s.id = su.seller_id AND s.ativo = true
+       WHERE c.uf IS NOT NULL
+         AND c.seller_id IS NULL
+         AND c.ativo = true
+         AND su.uf = c.uf
+         AND s.user_id = c.user_id
+         ${userFilter}`,
+      params
+    )
+    return rowCount
   },
 }

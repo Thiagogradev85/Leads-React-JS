@@ -17,11 +17,22 @@ export const SellerController = {
     } catch (err) { next(err) }
   },
 
+  async takenUFs(req, res, next) {
+    try {
+      const excludeId = req.query.exclude ? parseInt(req.query.exclude) : null
+      const data = await SellerModel.takenUFs(req.user.id, excludeId)
+      res.json(data)
+    } catch (err) { next(err) }
+  },
+
   async create(req, res, next) {
     try {
       const data = await SellerModel.create(req.body, req.user.id)
       res.status(201).json(data)
-    } catch (err) { next(err) }
+    } catch (err) {
+      if (err.status === 409) return next(new AppError(err.message, 409))
+      next(err)
+    }
   },
 
   async update(req, res, next) {
@@ -29,7 +40,10 @@ export const SellerController = {
       const data = await SellerModel.update(req.params.id, req.body, req.user.id)
       if (!data) throw new AppError('Vendedor não encontrado', 404)
       res.json(data)
-    } catch (err) { next(err) }
+    } catch (err) {
+      if (err.status === 409) return next(new AppError(err.message, 409))
+      next(err)
+    }
   },
 
   async delete(req, res, next) {

@@ -24,6 +24,7 @@ import settingsRoutes    from './routes/settings.js'
 import authRoutes        from './routes/auth.js'
 import { AppError }      from './utils/AppError.js'
 import db                from './db/db.js'
+import { ClientModel }   from './models/ClientModel.js'
 import { loadConfigFromDb } from './config/configService.js'
 import { seedAdmin }        from './config/adminSeed.js'
 
@@ -74,6 +75,18 @@ async function resetNaoTemInteresse() {
   }
 }
 
+// ── Auto-assign diário: associa vendedores a clientes com UF mas sem vendedor ──
+async function assignSellersToClients() {
+  try {
+    const count = await ClientModel.bulkAssignSellers()
+    if (count > 0) {
+      console.log(`[Auto-assign] ${count} cliente(s) associado(s) a vendedores.`)
+    }
+  } catch (err) {
+    console.error('[Auto-assign] Erro:', err.message)
+  }
+}
+
 function agendarResetMeiaNoite() {
   const agora = new Date()
 
@@ -87,6 +100,7 @@ function agendarResetMeiaNoite() {
   setTimeout(async () => {
     await resetContatadoParaProspeccao()
     await resetNaoTemInteresse()
+    await assignSellersToClients()
     agendarResetMeiaNoite() // reagenda para a próxima meia-noite de Brasília
   }, msAteReset)
 
@@ -147,5 +161,6 @@ httpServer.listen(PORT, async () => {
   await seedAdmin()
   resetContatadoParaProspeccao({ apenasAnteriores: true })
   resetNaoTemInteresse()
+  assignSellersToClients()
   agendarResetMeiaNoite()
 })

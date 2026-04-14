@@ -5,8 +5,9 @@ import { requireAuth } from '../middleware/authMiddleware.js'
 const router = Router()
 router.use(requireAuth)
 
-router.get('/',       SellerController.list)
-router.get('/:id',    SellerController.get)
+router.get('/taken-ufs', SellerController.takenUFs)
+router.get('/',          SellerController.list)
+router.get('/:id',       SellerController.get)
 router.post('/',      SellerController.create)
 router.put('/:id',    SellerController.update)
 router.delete('/:id', SellerController.delete)

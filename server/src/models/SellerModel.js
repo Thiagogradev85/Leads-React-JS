@@ -32,7 +32,35 @@ export const SellerModel = {
     return rows[0] || null
   },
 
+  // Retorna UFs já ocupadas por outros vendedores do mesmo usuário (exceto excludeId)
+  async takenUFs(userId, excludeSellerId = null) {
+    const { rows } = await db.query(
+      `SELECT su.uf
+       FROM seller_ufs su
+       JOIN sellers s ON s.id = su.seller_id
+       WHERE s.user_id = $1
+         AND s.ativo = true
+         AND ($2::int IS NULL OR s.id <> $2)`,
+      [userId, excludeSellerId]
+    )
+    return rows.map(r => r.uf)
+  },
+
+  // Valida que nenhuma das UFs solicitadas já está ocupada por outro vendedor
+  async validateUFsAvailable(ufs, userId, excludeSellerId = null) {
+    if (!ufs || ufs.length === 0) return
+    const taken = await this.takenUFs(userId, excludeSellerId)
+    const conflicts = ufs.map(u => u.toUpperCase()).filter(u => taken.includes(u))
+    if (conflicts.length > 0) {
+      const err = new Error(`UF(s) já atribuída(s) a outro vendedor: ${conflicts.join(', ')}`)
+      err.status = 409
+      err.conflicts = conflicts
+      throw err
+    }
+  },
+
   async create({ nome, whatsapp, ufs = [] }, userId) {
+    await this.validateUFsAvailable(ufs, userId)
     const client = await db.connect()
     try {
       await client.query('BEGIN')
@@ -58,6 +86,9 @@ export const SellerModel = {
   },
 
   async update(id, { nome, whatsapp, ativo, ufs }, userId) {
+    if (Array.isArray(ufs)) {
+      await this.validateUFsAvailable(ufs, userId, id)
+    }
     const client = await db.connect()
     try {
       await client.query('BEGIN')

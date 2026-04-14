@@ -89,6 +89,12 @@ export const api = {
   registerPurchase:(id)    => request('POST',   `/clients/${id}/purchase`),
   getOverdueClients: (days = 3) => request('GET', `/clients/overdue?days=${days}`),
   findDuplicates:    ()         => request('GET', '/clients/duplicates'),
+  listPendingUF:     ()         => request('GET', '/clients/pending-uf'),
+  assignUF:          (id, uf)   => request('PATCH', `/clients/${id}/assign-uf`, { uf }),
+  takenUFs:          (excludeId) => {
+    const qs = excludeId ? `?exclude=${excludeId}` : ''
+    return request('GET', `/sellers/taken-ufs${qs}`)
+  },
   exportClients: (params, format) => {
     const qs = new URLSearchParams({ ...params, format }).toString()
     window.open(`${BASE}/clients/export?${qs}`, '_blank')

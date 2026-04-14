@@ -35,7 +35,7 @@ const STATE_NAME_TO_UF = {
   'tocantins': 'TO',
 }
 
-const UF_REGEX = /\b([A-Z]{2})\b/
+const UF_REGEX_ALL = /\b([A-Z]{2})\b/g
 
 function normalize(str) {
   return String(str).toLowerCase()
@@ -54,14 +54,36 @@ function extractUF(value) {
   if (!value) return null
   const str = String(value).trim()
   const norm = normalize(str)
+
+  // 1. Nome completo do estado (ex: "São Paulo", "Minas Gerais")
   for (const [name, uf] of Object.entries(STATE_NAME_TO_UF)) {
     const nameNorm = normalize(name)
     if (norm === nameNorm || norm.startsWith(nameNorm) || norm.includes(nameNorm)) return uf
   }
+
   const upper = str.toUpperCase()
-  const match = upper.match(UF_REGEX)
-  if (match && KNOWN_UFS.has(match[1])) return match[1]
+
+  // 2. String inteira é exatamente uma UF (ex: "SP")
   if (KNOWN_UFS.has(upper.trim())) return upper.trim()
+
+  // 3. Padrão Cidade/UF no final: "Maceió/AL" ou "São Paulo / SP"
+  const slashEnd = upper.match(/\/\s*([A-Z]{2})\s*$/)
+  if (slashEnd && KNOWN_UFS.has(slashEnd[1])) return slashEnd[1]
+
+  // 4. Padrão "- UF" ou "– UF" no final: "Maceió - AL" ou "... - SP"
+  const dashEnd = upper.match(/[-–]\s*([A-Z]{2})\s*$/)
+  if (dashEnd && KNOWN_UFS.has(dashEnd[1])) return dashEnd[1]
+
+  // 5. Padrão "UF)" no final: "Maceió (AL)"
+  const parenEnd = upper.match(/\(\s*([A-Z]{2})\s*\)\s*$/)
+  if (parenEnd && KNOWN_UFS.has(parenEnd[1])) return parenEnd[1]
+
+  // 6. Varre TODOS os tokens de 2 letras maiúsculas — retorna o primeiro que é UF válida
+  const allMatches = [...upper.matchAll(UF_REGEX_ALL)]
+  for (const m of allMatches) {
+    if (KNOWN_UFS.has(m[1])) return m[1]
+  }
+
   return null
 }
 
@@ -238,10 +260,6 @@ export async function importExcel(fileOrBuffer) {
         }
       }
       if (!uf) uf = sheetUF
-      if (!uf) {
-        rejected.push({ linha: rowNum, valor: rawNome, motivo: 'Estado (UF) não encontrado' })
-        continue
-      }
 
       let whatsapp = iWhatsapp >= 0 ? cleanPhone(row[iWhatsapp]) : null
       if (!whatsapp) {
