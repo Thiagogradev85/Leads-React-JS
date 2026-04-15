@@ -34,17 +34,7 @@ export async function seedAdmin() {
       adminId = rows[0].id
     }
 
-    // Migra dados existentes sem user_id para o admin
-    const tables = ['clients', 'sellers', 'status', 'catalogs']
-    for (const table of tables) {
-      const { rowCount } = await db.query(
-        `UPDATE ${table} SET user_id = $1 WHERE user_id IS NULL`,
-        [adminId]
-      )
-      if (rowCount > 0) {
-        console.log(`[AdminSeed] ${rowCount} registro(s) de "${table}" migrado(s) para admin`)
-      }
-    }
+    // (migração user_id → company_id concluída na 016_companies.sql — nada a fazer aqui)
   } catch (err) {
     console.warn('[AdminSeed] Aviso:', err.message)
   }

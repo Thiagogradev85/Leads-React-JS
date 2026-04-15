@@ -1,5 +1,6 @@
 import { SellerModel } from '../models/SellerModel.js'
 import { AppError } from '../utils/AppError.js'
+import { BusinessRules } from '../rules/BusinessRules.js'
 
 export const SellerController = {
   async list(req, res, next) {

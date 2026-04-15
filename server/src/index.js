@@ -108,6 +108,56 @@ function agendarResetMeiaNoite() {
   console.log(`[Reset diário] Agendado para ${meiaNoite.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`)
 }
 
+// ── Backup diário às 2:00 BRT (05:00 UTC) ──────────────────────────────────
+async function backupClients() {
+  try {
+    // Apaga backups com mais de 7 dias
+    const { rowCount: deleted } = await db.query(
+      `DELETE FROM clients_backup WHERE backup_date < CURRENT_DATE - INTERVAL '7 days'`
+    )
+    if (deleted > 0) console.log(`[Backup] ${deleted} registros antigos removidos.`)
+
+    // Insere snapshot completo de hoje
+    const { rowCount } = await db.query(`
+      INSERT INTO clients_backup (
+        backup_date, client_id, nome, cidade, uf, whatsapp, telefone, email,
+        site, instagram, facebook, twitter, linkedin, responsavel,
+        logradouro, numero, complemento, bairro, cep, cnpj, nota, ativo,
+        ja_cliente, catalogo_enviado, nao_tem_interesse, ultimo_contato,
+        interesse_reset_at, status_id, seller_id, catalog_id,
+        user_id, company_id, created_at, updated_at
+      )
+      SELECT
+        CURRENT_DATE, id, nome, cidade, uf, whatsapp, telefone, email,
+        site, instagram, facebook, twitter, linkedin, responsavel,
+        logradouro, numero, complemento, bairro, cep, cnpj, nota, ativo,
+        ja_cliente, catalogo_enviado, nao_tem_interesse, ultimo_contato,
+        interesse_reset_at, status_id, seller_id, catalog_id,
+        user_id, company_id, created_at, updated_at
+      FROM clients
+    `)
+    console.log(`[Backup] ${rowCount} clientes copiados para clients_backup (${new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}).`)
+  } catch (err) {
+    console.error('[Backup] Erro:', err.message)
+  }
+}
+
+function agendarBackupDiario() {
+  const agora = new Date()
+  // 2:00 BRT = 05:00 UTC (no dia seguinte)
+  const dataHojeBrasilia = agora.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+  const [ano, mes, dia] = dataHojeBrasilia.split('-').map(Number)
+  const proxBackup = new Date(Date.UTC(ano, mes - 1, dia + 1, 5, 0, 0))
+  const msAte = proxBackup - agora
+
+  setTimeout(async () => {
+    await backupClients()
+    agendarBackupDiario()
+  }, msAte)
+
+  console.log(`[Backup] Agendado para ${proxBackup.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`)
+}
+
 const app        = express()
 const httpServer = createServer(app)
 const io         = new SocketIO(httpServer, {
@@ -165,4 +215,5 @@ httpServer.listen(PORT, async () => {
   resetNaoTemInteresse()
   assignSellersToClients()
   agendarResetMeiaNoite()
+  agendarBackupDiario()
 })

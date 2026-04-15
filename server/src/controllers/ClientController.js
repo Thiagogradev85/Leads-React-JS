@@ -4,6 +4,7 @@ import { importExcel } from '../modules/file-import/index.js'
 import { toExcel, toPDF } from '../modules/file-export/index.js'
 import { AppError } from '../utils/AppError.js'
 import { normalize, nameSimilar } from '../modules/prospecting/deduplication.js'
+import { BusinessRules } from '../rules/BusinessRules.js'
 
 function readFileFromRequest(req) {
   return new Promise((resolve, reject) => {
@@ -80,8 +81,8 @@ export const ClientController = {
   async create(req, res, next) {
     try {
       const { nome, uf } = req.body
-      if (!nome?.trim()) throw new AppError('Nome é obrigatório.', 422)
-      if (!uf?.trim())   throw new AppError('UF é obrigatória.', 422)
+      BusinessRules.validateClientNome(nome)
+      BusinessRules.validateClientUF(uf)
       const data = await ClientModel.create(req.body, req.user.company_id)
       res.status(201).json(data)
     } catch (err) {
@@ -93,8 +94,8 @@ export const ClientController = {
   async update(req, res, next) {
     try {
       const { nome, uf } = req.body
-      if (nome !== undefined && !nome?.trim()) throw new AppError('Nome é obrigatório.', 422)
-      if (uf   !== undefined && !uf?.trim())   throw new AppError('UF é obrigatória.', 422)
+      if (nome !== undefined) BusinessRules.validateClientNome(nome)
+      if (uf   !== undefined) BusinessRules.validateClientUF(uf)
       const data = await ClientModel.update(req.params.id, req.body, req.user.company_id)
       if (data === 'CONFLICT') throw new AppError('Este cliente foi alterado em outra aba ou sessão. Recarregue antes de salvar.', 409)
       if (!data) throw new AppError('Cliente não encontrado', 404)
@@ -218,7 +219,7 @@ export const ClientController = {
   async assignUF(req, res, next) {
     try {
       const { uf } = req.body
-      if (!uf?.trim()) throw new AppError('UF é obrigatória.', 422)
+      BusinessRules.validateClientUF(uf)
       const data = await ClientModel.assignUF(req.params.id, uf, req.user.company_id)
       if (!data) throw new AppError('Cliente não encontrado ou UF já atribuída.', 404)
       res.json(data)
