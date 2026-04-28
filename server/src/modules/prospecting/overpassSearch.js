@@ -18,7 +18,14 @@
  *   - Sem nenhum: retorna null (busca muito ampla)
  */
 
-const OVERPASS_URL = 'https://overpass-api.de/api/interpreter'
+// Lista de mirrors do Overpass em ordem de preferência.
+// Render (e outros cloud providers) às vezes tem conectividade instável
+// com overpass-api.de — os mirrors alternativos aumentam a resiliência.
+const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.openstreetmap.fr/api/interpreter',
+]
 
 // Mapeamento de termos PT-BR → tag OSM exata (complementa a busca por nome)
 const TERM_TAGS = [
@@ -192,33 +199,44 @@ export async function searchPlacesOverpass(segment, city, uf) {
 
   // Monta query com union de todos os filtros (nwr = node|way|relation)
   const filterLines = filters.map(f => `  nwr${f}(area.a);`).join('\n')
-  const query = `[out:json][timeout:30];
+  const query = `[out:json][timeout:25];
 ${areaQL}
 (
 ${filterLines}
 );
 out center 20;`
 
-  let response
-  try {
-    response = await fetch(OVERPASS_URL, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body:    `data=${encodeURIComponent(query)}`,
-      signal:  AbortSignal.timeout(35000),
-    })
-  } catch (err) {
-    console.warn(`[Overpass] erro de rede: ${err.message}`)
-    return null
+  // Tenta cada mirror até um responder com sucesso
+  let data = null
+  for (const mirrorUrl of OVERPASS_MIRRORS) {
+    let response
+    try {
+      response = await fetch(mirrorUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body:    `data=${encodeURIComponent(query)}`,
+        signal:  AbortSignal.timeout(28000),
+      })
+    } catch (err) {
+      console.warn(`[Overpass] mirror ${mirrorUrl} inacessível: ${err.message}`)
+      continue
+    }
+
+    if (!response.ok) {
+      console.warn(`[Overpass] mirror ${mirrorUrl} HTTP ${response.status}`)
+      continue
+    }
+
+    try { data = await response.json() } catch {
+      console.warn(`[Overpass] mirror ${mirrorUrl} resposta JSON inválida`)
+      continue
+    }
+    console.log(`[Overpass] mirror OK: ${mirrorUrl}`)
+    break
   }
 
-  if (!response.ok) {
-    console.warn(`[Overpass] HTTP ${response.status}`)
-    return null
-  }
-
-  let data
-  try { data = await response.json() } catch { return null }
+  // Todos os mirrors falharam — fallback indisponível
+  if (data === null) return null
 
   // Deduplica por ID do elemento OSM (um mesmo lugar pode aparecer em vários filtros)
   const seen = new Set()
@@ -232,7 +250,9 @@ out center 20;`
   if (unique.length === 0) {
     const area = city?.trim() || uf?.trim() || '?'
     console.log(`[Overpass] 0 resultados para "${segment}" em "${area}"`)
-    return null
+    // Retorna lista vazia (não null) — fallback funcionou, só não há dados.
+    // Retornar null aqui causaria 402 indevido no controller.
+    return { places: [], creditsUsed: 0, source: 'openstreetmap' }
   }
 
   const places = unique.slice(0, 20).map(el => {
